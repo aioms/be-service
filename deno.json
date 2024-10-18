@@ -1,0 +1,26 @@
+{
+  "tasks": {
+    "start": "deno run --env --allow-net --allow-env src/main.ts",
+    "dev": "deno run --env -A --watch src/main.ts",
+    "gen:migrations": "deno run -A npm:drizzle-kit generate",
+    "run:migrations": "deno run -A npm:drizzle-kit migrate"
+  },
+  "compilerOptions": {
+    "jsx": "precompile",
+    "jsxImportSource": "hono/jsx",
+    "noImplicitAny": false,
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true
+  },
+  "imports": {
+    "@hono/zod-validator": "npm:@hono/zod-validator@^0.4.1",
+    "bcryptjs": "npm:bcryptjs@^2.4.3",
+    "drizzle-kit": "npm:drizzle-kit@^0.26.2",
+    "drizzle-orm": "npm:drizzle-orm@^0.35.1",
+    "hono": "npm:hono@^4.6.5",
+    "postgres": "npm:postgres@^3.4.4",
+    "reflect-metadata": "npm:reflect-metadata@^0.2.2",
+    "tsyringe": "npm:tsyringe@^4.8.0",
+    "zod": "npm:zod@^3.23.8"
+  }
+}
