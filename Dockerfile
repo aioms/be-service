@@ -1,0 +1,26 @@
+# Stage 1: Build Stage
+FROM denoland/deno:alpine-2.0.2 as builder
+
+WORKDIR /app
+
+# Cache and install dependencies
+COPY deno* .
+RUN deno install
+
+# Copy the rest of the application files
+COPY . .
+
+# Stage 2: Runtime Stage
+FROM denoland/deno:alpine-2.0.2
+
+WORKDIR /app
+
+# Copy the cached dependencies from the builder stage
+COPY --from=builder /app /app
+
+# Expose the application port (adjust as per your app)
+EXPOSE 2005
+
+# Set the entrypoint for Deno to run the app
+CMD ["run", "--allow-net", "--allow-env", "--allow-read", "--allow-write", "src/main.ts"]
+

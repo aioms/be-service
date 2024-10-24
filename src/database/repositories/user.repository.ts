@@ -1,11 +1,7 @@
 import { eq, SQL } from "drizzle-orm";
 import { singleton } from "tsyringe";
 import { database } from "../../common/config/database.ts";
-import {
-  InsertUser,
-  SelectUser,
-  userTable,
-} from "../../modules/auth/schemas/user.schema.ts";
+import { InsertUser, SelectUser, userTable } from "../schemas/user.schema.ts";
 
 interface OptionBase {
   select: Record<string, any>;
