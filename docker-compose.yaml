@@ -11,7 +11,7 @@ services:
     restart: unless-stopped
     env_file: .env
     ports:
-      - "${PORT}:${PORT}"
+      - "${DOCKER_APP_PORT}:${PORT}"
     depends_on:
       - postgres
       - redis

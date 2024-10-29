@@ -3,7 +3,7 @@ import { DbTables } from "../../common/config/index.ts";
 
 export const roleTable = pgTable(DbTables.Roles, {
   id: uuid("id").primaryKey().defaultRandom(),
-  name: text("name").unique(),
+  name: text("name").unique().notNull(),
   createdAt: timestamp("created_at", { mode: "string" }).defaultNow(),
 });
 

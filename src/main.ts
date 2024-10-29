@@ -6,7 +6,7 @@ import { logger } from "hono/logger";
 import { compress } from "hono/compress";
 import { cors } from "hono/cors";
 import { showRoutes } from "hono/dev";
-import AuthModule from "./modules/auth/features/v1/auth.module.ts";
+import AuthModule from "./modules/auth/auth.module.ts";
 
 const app = new Hono();
 
@@ -17,7 +17,13 @@ app.use(logger());
 app.use("*", (c, next) => {
   const corsMiddleware = cors({
     origin: "*",
-    allowHeaders: ["Origin", "X-Requested-With", "Content-Type", "Accept"],
+    allowHeaders: [
+      "Origin",
+      "X-Requested-With",
+      "Content-Type",
+      "Accept",
+      "authorization",
+    ],
     allowMethods: ["*"],
     credentials: true,
   });

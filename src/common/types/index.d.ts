@@ -1,4 +1,4 @@
-import { Context } from "hono";
+import { SQL } from "drizzle-orm";
 import { Role } from "../enums/index.ts";
 
 declare module "hono" {
@@ -18,6 +18,22 @@ export interface User {
   jwt: string;
 }
 
-export interface IContext extends Context {
-  user: User;
+export interface RepositoryOption {
+  select: Record<string, any>;
+  where: SQL[];
+  orderBy?: SQL[];
+  limit?: number;
+  offset?: number;
+  isCount?: boolean;
+}
+
+export interface RepositoryOptionUpdate<T> {
+  where: SQL[];
+  set: T;
+}
+
+export interface RepositoryResult<T = any> {
+  data: T | T[];
+  error: any;
+  count?: number | null;
 }

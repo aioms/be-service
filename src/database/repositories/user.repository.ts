@@ -1,19 +1,18 @@
-import { eq, SQL } from "drizzle-orm";
+import { SQL, eq, and, isNull, desc } from "drizzle-orm";
 import { singleton } from "tsyringe";
 import { database } from "../../common/config/database.ts";
 import { InsertUser, SelectUser, userTable } from "../schemas/user.schema.ts";
-
-interface OptionBase {
-  select: Record<string, any>;
-  where: SQL<unknown>;
-  orderBy?: SQL;
-  limit?: number;
-}
-
-interface OptionUpdateBase<T> {
-  where: SQL<unknown>;
-  set: T;
-}
+import { roleTable, SelectRole } from "../schemas/role.schema.ts";
+import {
+  InsertUserRole,
+  SelectUserRole,
+  userRoleTable,
+} from "../schemas/user-role.schema.ts";
+import {
+  RepositoryOption,
+  RepositoryOptionUpdate,
+  RepositoryResult,
+} from "../../common/types/index.d.ts";
 
 // export interface IUserRepository {
 //   createUser(data: InsertUser): Promise<any>;
@@ -32,55 +31,104 @@ interface OptionUpdateBase<T> {
 
 @singleton()
 export class UserRepository {
-  createUser(data: InsertUser) {
-    return database
+  /**
+   * USER
+   */
+  async createUser(data: InsertUser) {
+    const result = await database
       .insert(userTable)
       .values(data)
       .returning({ id: userTable.id });
+    return { data: result, error: null };
   }
 
   async findUserById(
     id: SelectUser["id"],
-    opts: Pick<OptionBase, "select">,
-  ): Promise<Record<string, any> | null> {
+    opts: Pick<RepositoryOption, "select">,
+  ): Promise<RepositoryResult> {
     const query = database
       .selectDistinct(opts.select)
       .from(userTable)
-      .where(eq(userTable.id, id));
+      .where(and(eq(userTable.id, id), isNull(userTable.deletedAt)));
 
     const [result] = await query.execute();
-    return result;
+    return { data: result, error: null };
   }
 
   async findUsersByCondition(
-    opts: OptionBase,
-  ): Promise<Record<string, any>[] | []> {
+    opts: RepositoryOption,
+  ): Promise<RepositoryResult> {
+    let count: number | null = null;
+    const filters: SQL[] = [isNull(userTable.deletedAt), ...opts.where];
+
     const query = database
       .select(opts.select)
       .from(userTable)
-      .where(opts.where);
+      .where(and(...filters));
 
     if (opts.orderBy) {
-      query.orderBy(opts.orderBy);
+      query.orderBy(...opts.orderBy);
+    } else {
+      query.orderBy(desc(userTable.createdAt));
     }
 
     if (opts.limit) {
       query.limit(opts.limit);
     }
 
+    if (opts.offset) {
+      query.offset(opts.offset);
+    }
+
+    if (opts.isCount) {
+      count = await database.$count(userTable);
+    }
+
     const results = await query.execute();
-    return results;
+    return { data: results, error: null, count };
   }
 
-  updateUser(
-    opts: OptionUpdateBase<
-      Partial<Omit<SelectUser, "id" | "password" | "username" | "createdAt">>
+  async updateUser(
+    opts: RepositoryOptionUpdate<
+      Partial<Omit<SelectUser, "id" | "password" | "createdAt">>
     >,
   ) {
-    return database.update(userTable).set(opts.set).where(opts.where);
+    const filters: SQL[] = [isNull(userTable.deletedAt), ...opts.where];
+
+    const result = await database
+      .update(userTable)
+      .set(opts.set)
+      .where(and(...filters))
+      .returning({ id: userTable.id });
+
+    return { data: result, error: null };
   }
 
-  deleteUser(id: SelectUser["id"]) {
-    return database.delete(userTable).where(eq(userTable.id, id));
+  async deleteUser(id: SelectUser["id"]) {
+    const result = await database.delete(userTable).where(eq(userTable.id, id));
+    return { data: result, error: null };
+  }
+
+  /**
+   * ROLES & PERMISSION
+   */
+  async findRoleByName(name: SelectRole["name"]): Promise<RepositoryResult> {
+    const query = database
+      .selectDistinct()
+      .from(roleTable)
+      .where(eq(roleTable.name, name));
+
+    const [result] = await query.execute();
+    return { data: result, error: null };
+  }
+
+  createUserRole(data: InsertUserRole) {
+    return database.insert(userRoleTable).values(data);
+  }
+
+  deleteUserRoles(userId: SelectUserRole["userId"]) {
+    return database
+      .delete(userRoleTable)
+      .where(eq(userRoleTable.userId, userId));
   }
 }

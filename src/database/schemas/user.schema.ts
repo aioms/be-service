@@ -6,7 +6,7 @@ import {
   uuid,
   jsonb,
 } from "drizzle-orm/pg-core";
-import { UserStatus } from "../../modules/auth/enums/auth.enum.ts";
+import { UserStatus } from "../../modules/auth/enums/user.enum.ts";
 import { DbTables } from "../../common/config/index.ts";
 
 export const userStatus = pgEnum(

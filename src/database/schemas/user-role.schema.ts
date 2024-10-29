@@ -6,8 +6,12 @@ import { DbTables } from "../../common/config/index.ts";
 export const userRoleTable = pgTable(
   DbTables.UserRoles,
   {
-    userId: uuid("user_id").references(() => userTable.id),
-    roleId: uuid("role_id").references(() => roleTable.id),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => userTable.id),
+    roleId: uuid("role_id")
+      .notNull()
+      .references(() => roleTable.id),
   },
   (table) => {
     return {
