@@ -4,66 +4,60 @@ import { HTTPException } from "hono/http-exception";
 import { requestId } from "hono/request-id";
 import { logger } from "hono/logger";
 import { compress } from "hono/compress";
-import { cors } from "hono/cors";
 import { showRoutes } from "hono/dev";
+
 import AuthModule from "./modules/auth/auth.module.ts";
+import ProductModule from "./modules/product/product.module.ts";
 
-const app = new Hono();
+import { corsMiddleware } from "./common/middlewares/cors.ts";
 
-app.use(compress());
-app.use("*", requestId());
-app.use(logger());
+const startServer = () => {
+  const app = new Hono();
 
-app.use("*", (c, next) => {
-  const corsMiddleware = cors({
-    origin: "*",
-    allowHeaders: [
-      "Origin",
-      "X-Requested-With",
-      "Content-Type",
-      "Accept",
-      "authorization",
-    ],
-    allowMethods: ["*"],
-    credentials: true,
+  app.use(compress());
+  app.use(logger());
+
+  app.use("*", requestId());
+  app.use("*", corsMiddleware);
+
+  AuthModule.init(app);
+  ProductModule.init(app);
+
+  app.get("/ping", (c) => {
+    return c.text("PONG!");
   });
-  return corsMiddleware(c, next);
-});
 
-AuthModule.init(app);
+  app.notFound((c) => {
+    return c.text("Not Found Page - 404", 404);
+  });
 
-app.get("/ping", (c) => {
-  return c.text("PONG!");
-});
+  app.onError((err: any, ctx) => {
+    console.error(`${err}`);
 
-app.notFound((c) => {
-  return c.text("Not Found Page - 404", 404);
-});
+    if (err instanceof HTTPException) {
+      return err.getResponse();
+    }
 
-app.onError((err: any, ctx) => {
-  console.error(`${err}`);
+    return ctx.json(
+      {
+        message: `${err}`,
+        success: false,
+        statusCode: 500,
+      },
+      500,
+    );
+  });
 
-  if (err instanceof HTTPException) {
-    return err.getResponse();
-  }
+  showRoutes(app, {
+    verbose: true,
+  });
 
-  return ctx.json(
+  Deno.serve(
     {
-      message: `${err}`,
-      success: false,
-      statusCode: 500,
+      port: parseInt(Deno.env.get("PORT") || "2005"),
     },
-    500,
+    app.fetch,
   );
-});
+};
 
-showRoutes(app, {
-  verbose: true,
-});
-
-Deno.serve(
-  {
-    port: parseInt(Deno.env.get("PORT") || "2005"),
-  },
-  app.fetch,
-);
+startServer();

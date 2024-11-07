@@ -25,7 +25,6 @@ export default class LoginHandler {
         salt: userTable.salt,
       },
     });
-    console.log({ user });
 
     if (!user) {
       return ctx.json({
@@ -47,18 +46,19 @@ export default class LoginHandler {
 
     const roles = await this.authRepository.findRolesOfUser(user.id);
     const roleIds = roles.map((r) => r.roleId);
-    console.log({ roles, roleIds });
 
-    const tokenVersion = nanoid();
+    const tokenVersion = nanoid(5);
     const payload = {
       v: tokenVersion,
       sub: user.id,
       roles: roleIds,
       // exp: Math.floor(Date.now() / 1000) + 60 * 5, // Token expires in 5 minutes
     };
-    const token = await sign(payload, config.authJwtSecret);
 
-    await this.authRepository.updateTokenVersion(user.id, tokenVersion);
+    const [token] = await Promise.all([
+      sign(payload, config.authJwtSecret),
+      this.authRepository.updateTokenVersion(user.id, tokenVersion),
+    ]);
 
     return ctx.json({
       statusCode: 200,
@@ -74,14 +74,17 @@ export default class LoginHandler {
     });
   }
 
-  logout(ctx: Context) {
-    const user = ctx.get("user");
+  async logout(ctx: Context) {
+    const jwtPayload = ctx.get("jwtPayload");
     const query = ctx.req.query();
-    console.log({ query, user });
+    console.log({ query, jwtPayload });
+
+    const tokenVersion = nanoid(5);
+    await this.authRepository.updateTokenVersion(jwtPayload.sub, tokenVersion);
 
     return ctx.json({
-      message: "Ok",
       success: true,
+      statusCode: 204,
     });
   }
 }

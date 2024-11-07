@@ -97,12 +97,10 @@ export default class UserHandler {
       ]);
     }
 
-    console.log({ dataUpdate });
     const { data: userUpdated } = await this.userRepository.updateUser({
       set: dataUpdate,
       where: [eq(userTable.id, id)],
     });
-    console.log({ userUpdated });
 
     if (!userUpdated.length) {
       throw new Error("Can't update user");

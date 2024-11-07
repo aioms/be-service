@@ -35,6 +35,7 @@ export const DbTables = Object.freeze({
   Users: "users",
   Roles: "roles",
   UserRoles: "user_roles",
+  Products: "products",
 });
 
 export default parsedConfig.data;

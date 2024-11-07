@@ -23,6 +23,7 @@
     "postgres": "npm:postgres@^3.4.4",
     "reflect-metadata": "npm:reflect-metadata@^0.2.2",
     "tsyringe": "npm:tsyringe@^4.8.0",
+    "xlsx": "npm:xlsx@^0.18.5",
     "zod": "npm:zod@^3.23.8"
   }
 }
