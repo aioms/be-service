@@ -18,6 +18,14 @@ export interface User {
   jwt: string;
 }
 
+export interface ResponseType<T = any> {
+  success: boolean;
+  statusCode: number;
+  message?: string;
+  data?: T | T[];
+  metadata?: Record<string, any>;
+}
+
 export interface RepositoryOption {
   select: Record<string, any>;
   where: SQL[];

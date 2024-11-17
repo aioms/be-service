@@ -29,6 +29,34 @@
       "when": 1730963861249,
       "tag": "0003_add_product_table",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1731774580533,
+      "tag": "0004_groovy_slapstick",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1731782645853,
+      "tag": "0005_gifted_scream",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1731783048084,
+      "tag": "0006_daily_marvel_zombies",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1731783621295,
+      "tag": "0007_wise_captain_britain",
+      "breakpoints": true
     }
   ]
 }

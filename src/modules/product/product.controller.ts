@@ -13,6 +13,22 @@ export default class ProductController {
   init(app: Hono) {
     const route = new Hono();
 
+    route.get("/products/categories", authenticate, (c) =>
+      this.productHandler.getCategories(c),
+    );
+
+    route.get("/products/suppliers", authenticate, (c) =>
+      this.productHandler.getSuppliers(c),
+    );
+
+    route.get("/products/units", authenticate, (c) =>
+      this.productHandler.getUnits(c),
+    );
+
+    route.post("/products", authenticate, (c) =>
+      this.productHandler.createProduct(c),
+    );
+
     route.put("/products/:id", authenticate, (c) =>
       this.productHandler.updateProduct(c),
     );

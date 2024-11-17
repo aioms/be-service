@@ -1,6 +1,6 @@
 import { singleton, inject } from "tsyringe";
 import { Context } from "hono";
-import { or, ilike, eq, desc, asc } from "drizzle-orm";
+import { or, ilike, eq, desc } from "drizzle-orm";
 import dayjs from "dayjs";
 import * as XLSX from "xlsx";
 
@@ -8,6 +8,7 @@ import { ProductRepository } from "../../../database/repositories/product.reposi
 import { ProductStatus } from "../enums/product.enum.ts";
 import {
   productTable,
+  type InsertProduct,
   type UpdateProduct,
 } from "../../../database/schemas/product.schema.ts";
 import {
@@ -15,12 +16,58 @@ import {
   getPaginationMetadata,
   parseBodyJson,
 } from "../../../common/utils/index.ts";
+import { generateProductCode } from "../utils/product.util.ts";
+import { ResponseType } from "../../../common/types/index.d.ts";
 
 @singleton()
 export default class ProductHandler {
   constructor(
     @inject(ProductRepository) private productRepository: ProductRepository,
   ) {}
+
+  async createProduct(ctx: Context) {
+    const body = await parseBodyJson<InsertProduct>(ctx);
+    const {
+      category,
+      productName,
+      sellingPrice,
+      costPrice,
+      inventory,
+      unit,
+      supplier,
+      additionalDescription,
+      warehouseLocation,
+      status,
+    } = body;
+
+    const { data: lastIndex } = await this.productRepository.getLastIndex();
+    const productCode = generateProductCode(lastIndex!);
+
+    const { data: products } = await this.productRepository.createProduct({
+      index: lastIndex! + 1,
+      productCode,
+      productName,
+      sellingPrice,
+      costPrice,
+      inventory,
+      unit,
+      category,
+      supplier,
+      additionalDescription,
+      warehouseLocation,
+      status,
+    });
+
+    if (!products.length) {
+      throw new Error("Can't create product");
+    }
+
+    return ctx.json({
+      data: { id: products[0].id, productCode },
+      success: true,
+      statusCode: 201,
+    });
+  }
 
   async updateProduct(ctx: Context) {
     const id = ctx.req.param("id");
@@ -167,7 +214,7 @@ export default class ProductHandler {
           updatedAt: productTable.updatedAt,
         },
         where: filters,
-        orderBy: [asc(productTable.productCode)],
+        orderBy: [desc(productTable.index)],
         limit,
         offset,
         isCount: true,
@@ -178,6 +225,45 @@ export default class ProductHandler {
     return ctx.json({
       data: products,
       metadata,
+      success: true,
+      statusCode: 200,
+    });
+  }
+
+  async getCategories(ctx: Context) {
+    const { data } = await this.productRepository.findCategoriesByCondition({
+      select: {},
+      where: [],
+    });
+
+    return ctx.json({
+      data,
+      success: true,
+      statusCode: 200,
+    });
+  }
+
+  async getSuppliers(ctx: Context) {
+    const { data } = await this.productRepository.findSuppliersByCondition({
+      select: {},
+      where: [],
+    });
+
+    return ctx.json({
+      data,
+      success: true,
+      statusCode: 200,
+    });
+  }
+
+  async getUnits(ctx: Context) {
+    const { data } = await this.productRepository.findUnitByCondition({
+      select: {},
+      where: [],
+    });
+
+    return ctx.json({
+      data,
       success: true,
       statusCode: 200,
     });
@@ -194,19 +280,21 @@ export default class ProductHandler {
     // const jwtPayload = ctx.get("jwtPayload");
     // const userId = jwtPayload.sub;
 
+    const query = ctx.req.query();
     const body = await ctx.req.parseBody();
 
     if (body["file"] instanceof File) {
       const file = body["file"];
       console.log(`Got file sized: ${file.size}`);
 
-      await new Promise((resolve) => {
+      const result: ResponseType = await new Promise((resolve) => {
         const reader = new FileReader();
 
         reader.onload = async (event: ProgressEvent<FileReader>) => {
           if (!event.target) {
             return resolve({
               success: false,
+              message: "Event target not found",
               statusCode: 500,
             });
           }
@@ -217,14 +305,29 @@ export default class ProductHandler {
           const sheetData: any[] = XLSX.utils.sheet_to_json(sheet);
 
           for (const row of sheetData) {
+            const code = row["Mã hàng"];
+            const [, index] = code.split("NK");
+
+            if (!index || isNaN(index)) {
+              return resolve({
+                success: false,
+                message: `Product code invalid: ${code}`,
+                statusCode: 400,
+              });
+            }
+
+            const count = parseInt(index);
+            const productCode = generateProductCode(count - 1);
+
             const product = {
-              category: row["Nhóm hàng(3 Cấp)"],
-              productCode: row["Mã hàng"],
+              index: count,
+              productCode,
               productName: row["Tên hàng"],
               sellingPrice: row["Giá bán"],
               costPrice: row["Giá vốn"],
               inventory: row["Tồn kho"],
               unit: row["ĐVT"],
+              category: row["Nhóm hàng(3 Cấp)"],
               supplier: row["Nhà Cung Cấp"],
               additionalDescription: row["Mô tả thêm"],
               imageUrls: row["Hình ảnh (url1,url2...)"]?.split(",") ?? [],
@@ -233,9 +336,15 @@ export default class ProductHandler {
             };
 
             // Check for duplicates based on product_code
-            await this.productRepository.createProductOnConflictDoUpdate(
-              product,
-            );
+            if (query.type === "2") {
+              await this.productRepository.createProductOnConflictDoUpdate(
+                product,
+              );
+            } else {
+              await this.productRepository.createProductOnConflictDoNothing(
+                product,
+              );
+            }
           }
 
           resolve({
@@ -247,13 +356,11 @@ export default class ProductHandler {
         reader.readAsArrayBuffer(file);
       });
 
-      return ctx.json({
-        success: true,
-        statusCode: 200,
-      });
+      return ctx.json(result);
     } else {
       return ctx.json({
         success: false,
+        message: "File not found",
         statusCode: 400,
       });
     }

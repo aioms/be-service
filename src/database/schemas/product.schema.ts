@@ -4,8 +4,8 @@ import {
   pgEnum,
   uuid,
   text,
-  integer,
   timestamp,
+  integer,
 } from "drizzle-orm/pg-core";
 import { DbTables } from "../../common/config/index.ts";
 import { customNumeric } from "../custom/data-types.ts";
@@ -18,13 +18,14 @@ export const productStatus = pgEnum(
 
 export const productTable = pgTable(DbTables.Products, {
   id: uuid("id").primaryKey().defaultRandom(),
-  category: text("category"),
+  index: integer("index").unique(),
   productCode: text("product_code").unique(),
   productName: text("product_name").notNull(),
-  sellingPrice: integer("selling_price"),
+  sellingPrice: customNumeric("selling_price"),
   costPrice: customNumeric("cost_price"),
-  inventory: integer("inventory"),
+  inventory: customNumeric("inventory"),
   unit: text("unit"),
+  category: text("category"),
   supplier: text("supplier"),
   additionalDescription: text("additional_description"),
   imageUrls: text("image_urls")

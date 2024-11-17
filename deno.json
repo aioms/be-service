@@ -2,8 +2,10 @@
   "tasks": {
     "start": "deno run --env --allow-net --allow-env src/main.ts",
     "dev": "deno run --env -A --watch src/main.ts",
+    "studio": "deno run -A npm:drizzle-kit studio",
     "gen:migrations": "deno run -A npm:drizzle-kit generate",
-    "run:migrations": "deno run -A npm:drizzle-kit migrate"
+    "run:migrations": "deno run -A npm:drizzle-kit migrate",
+    "dk:check": "deno run -A npm:drizzle-kit check"
   },
   "compilerOptions": {
     "jsx": "precompile",

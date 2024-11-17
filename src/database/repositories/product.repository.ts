@@ -1,4 +1,4 @@
-import { SQL, eq, and, desc } from "drizzle-orm";
+import { SQL, eq, and, desc, like } from "drizzle-orm";
 import { singleton } from "tsyringe";
 import { database } from "../../common/config/database.ts";
 import {
@@ -83,11 +83,26 @@ export class ProductRepository {
     }
 
     if (opts.isCount) {
-      count = await database.$count(productTable);
+      count = await database.$count(productTable, and(...filters));
     }
 
     const results = await query.execute();
     return { data: results, error: null, count };
+  }
+
+  async getLastIndex() {
+    const lastIndexProduct = await database
+      .select()
+      .from(productTable)
+      .orderBy(desc(productTable.index))
+      .limit(1)
+      .execute();
+
+    if (!lastIndexProduct.length) {
+      return { data: 0, error: null };
+    }
+
+    return { data: lastIndexProduct[0].index, error: null };
   }
 
   async updateProduct(opts: RepositoryOptionUpdate<UpdateProduct>) {
@@ -109,5 +124,65 @@ export class ProductRepository {
       .returning({ id: productTable.id });
 
     return { data: result, error: null };
+  }
+
+  async findCategoriesByCondition(opts: RepositoryOption) {
+    const filters: SQL[] = [...opts.where];
+
+    const query = database
+      .selectDistinctOn([productTable.category], {
+        category: productTable.category,
+      })
+      .from(productTable)
+      .where(and(...filters))
+      .orderBy(productTable.category);
+
+    const results = await query.execute();
+    if (results.length) {
+      const categories = results.map((r) => r.category);
+      return { data: categories, error: null };
+    }
+
+    return { data: [], error: new Error("Categories not found") };
+  }
+
+  async findSuppliersByCondition(opts: RepositoryOption) {
+    const filters: SQL[] = [...opts.where];
+
+    const query = database
+      .selectDistinctOn([productTable.supplier], {
+        supplier: productTable.supplier,
+      })
+      .from(productTable)
+      .where(and(...filters))
+      .orderBy(productTable.supplier);
+
+    const results = await query.execute();
+    if (results.length) {
+      const suppliers = results.map((r) => r.supplier);
+      return { data: suppliers, error: null };
+    }
+
+    return { data: results, error: null };
+  }
+
+  async findUnitByCondition(opts: RepositoryOption) {
+    const filters: SQL[] = [...opts.where];
+
+    const query = database
+      .selectDistinctOn([productTable.unit], {
+        unit: productTable.unit,
+      })
+      .from(productTable)
+      .where(and(...filters))
+      .orderBy(productTable.unit);
+
+    const results = await query.execute();
+    if (results.length) {
+      const unit = results.map((r) => r.unit);
+      return { data: unit, error: null };
+    }
+
+    return { data: results, error: null };
   }
 }
