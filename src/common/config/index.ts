@@ -28,7 +28,7 @@ const parsedConfig = configSchema.safeParse(config);
 
 if (!parsedConfig.success) {
   console.error("Invalid env:", parsedConfig.error.format());
-  Deno.exit(1);
+  // throw new Error("Invalid env");
 }
 
 export const DbTables = Object.freeze({

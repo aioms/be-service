@@ -179,8 +179,8 @@ export default class ProductHandler {
     if (keyword) {
       filters.push(
         or(
-          ilike(productTable.productCode, keyword),
-          ilike(productTable.productName, keyword),
+          ilike(productTable.productCode, `%${keyword}%`),
+          ilike(productTable.productName, `%${keyword}%`),
         ),
       );
     }
