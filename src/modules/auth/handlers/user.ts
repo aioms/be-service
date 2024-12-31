@@ -19,20 +19,19 @@ export default class UserHandler {
   constructor(@inject(UserRepository) private userRepository: UserRepository) {}
 
   async createUser(ctx: Context) {
-    const jwtPayload = ctx.get("jwtPayload");
     const body = await parseBodyJson<CreateUserDto>(ctx);
     const { username, password, fullname, phone, role, storeCode, status } =
       body;
-    console.log({ jwtPayload });
+    console.log({ body });
 
     const salt = bcrypt.genSaltSync(10);
     const hashedPassword = bcrypt.hashSync(password, salt);
 
-    const { data: userRole } = await this.userRepository.findRoleByName(role);
-
-    if (!userRole) {
-      throw new Error("Can't find role");
-    }
+    // const { data: userRole } = await this.userRepository.findRoleByName(role);
+    //
+    // if (!userRole) {
+    //   throw new Error("Can't find role");
+    // }
 
     const { data: newUser } = await this.userRepository.createUser({
       fullname,
@@ -42,16 +41,17 @@ export default class UserHandler {
       password: hashedPassword,
       salt,
       status,
+      role,
     });
 
     if (!newUser.length) {
       throw new Error("Can't create user");
     }
 
-    await this.userRepository.createUserRole({
-      userId: newUser[0].id,
-      roleId: userRole.id,
-    });
+    // await this.userRepository.createUserRole({
+    //   userId: newUser[0].id,
+    //   roleId: userRole.id,
+    // });
 
     return ctx.json({
       data: { id: newUser[0].id },
@@ -71,6 +71,7 @@ export default class UserHandler {
     if (phone) dataUpdate.phone = phone;
     if (storeCode) dataUpdate.storeCode = storeCode;
     if (status) dataUpdate.status = status;
+    if (role) dataUpdate.role = role;
 
     if (password) {
       const salt = bcrypt.genSaltSync(10);
@@ -81,21 +82,21 @@ export default class UserHandler {
       dataUpdate.tokenVersion = nanoid();
     }
 
-    if (role) {
-      const { data: userRole } = await this.userRepository.findRoleByName(role);
-
-      if (!userRole) {
-        throw new Error("Can't find role");
-      }
-
-      await Promise.all([
-        this.userRepository.deleteUserRoles(id),
-        this.userRepository.createUserRole({
-          userId: id,
-          roleId: userRole.id,
-        }),
-      ]);
-    }
+    // if (role) {
+    //   const { data: userRole } = await this.userRepository.findRoleByName(role);
+    //
+    //   if (!userRole) {
+    //     throw new Error("Can't find role");
+    //   }
+    //
+    //   await Promise.all([
+    //     this.userRepository.deleteUserRoles(id),
+    //     this.userRepository.createUserRole({
+    //       userId: id,
+    //       roleId: userRole.id,
+    //     }),
+    //   ]);
+    // }
 
     const { data: userUpdated } = await this.userRepository.updateUser({
       set: dataUpdate,
@@ -155,6 +156,7 @@ export default class UserHandler {
         phone: userTable.phone,
         status: userTable.status,
         storeCode: userTable.storeCode,
+        role: userTable.role,
       },
     });
     if (!user) {
@@ -197,6 +199,7 @@ export default class UserHandler {
           phone: userTable.phone,
           status: userTable.status,
           storeCode: userTable.storeCode,
+          role: userTable.role,
         },
         where: filters,
         limit,

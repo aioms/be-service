@@ -86,7 +86,7 @@ export default class ProductHandler {
       unit,
     } = body;
 
-    const dataUpdate: UpdateProduct = {
+    const dataUpdate: Partial<UpdateProduct> = {
       updatedAt: dayjs().toISOString(),
     };
 
@@ -332,7 +332,7 @@ export default class ProductHandler {
               additionalDescription: row["Mô tả thêm"],
               imageUrls: row["Hình ảnh (url1,url2...)"]?.split(",") ?? [],
               warehouseLocation: row["Vị trí"],
-              status: ProductStatus.active,
+              status: ProductStatus.ACTIVE,
             };
 
             // Check for duplicates based on product_code

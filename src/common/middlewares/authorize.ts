@@ -4,7 +4,7 @@ import { createMiddleware } from "hono/factory";
 export const authorizeRole = (roles) => {
   return createMiddleware(async (ctx, next) => {
     const payload = ctx.get("jwtPayload");
-    console.log({ payload });
+    console.log({ payload, roles });
 
     // const isValidRoles = roles.some(role => payload.roles?.includes(role));
     // if (!isValidRoles) {

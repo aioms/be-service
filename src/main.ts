@@ -6,10 +6,13 @@ import { logger } from "hono/logger";
 import { compress } from "hono/compress";
 import { showRoutes } from "hono/dev";
 
+// Middlewares
+import { corsMiddleware } from "./common/middlewares/cors.ts";
+
+// Modules
 import AuthModule from "./modules/auth/auth.module.ts";
 import ProductModule from "./modules/product/product.module.ts";
-
-import { corsMiddleware } from "./common/middlewares/cors.ts";
+import InventoryModule from "./modules/inventory/inventory.module.ts";
 
 const startServer = () => {
   const app = new Hono();
@@ -22,6 +25,7 @@ const startServer = () => {
 
   AuthModule.init(app);
   ProductModule.init(app);
+  InventoryModule.init(app);
 
   app.get("/ping", (c) => {
     return c.text("PONG!");
@@ -31,7 +35,7 @@ const startServer = () => {
     return c.text("Not Found Page - 404", 404);
   });
 
-  app.onError((err: any, ctx) => {
+  app.onError((err: Error, ctx) => {
     console.error(`${err}`);
 
     if (err instanceof HTTPException) {

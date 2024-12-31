@@ -13,7 +13,7 @@ services:
       - postgres
       - redis
     environment:
-      POSTGRES_URL: postgres://user:password@postgres:5432/dbname
+      POSTGRES_URL: postgres://user:password@postgres:5432/aios_db
       REDIS_URL: redis://redis:6379
     networks:
       - aios-network

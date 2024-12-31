@@ -36,6 +36,9 @@ export const DbTables = Object.freeze({
   Roles: "roles",
   UserRoles: "user_roles",
   Products: "products",
+  ReceiptImports: "receipt_imports",
+  ReceiptReturns: "receipt_returns",
+  ReceiptItems: "receipt_items",
 });
 
 export default parsedConfig.data;

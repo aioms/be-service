@@ -16,6 +16,7 @@ export default class LoginHandler {
 
   async loginWithPassword(ctx: Context) {
     const body = await parseBodyJson<LoginDto>(ctx);
+    console.log({ body });
 
     const user = await this.authRepository.findUserByUsername(body.username, {
       select: {
@@ -23,6 +24,7 @@ export default class LoginHandler {
         username: userTable.username,
         password: userTable.password,
         salt: userTable.salt,
+        role: userTable.role,
       },
     });
 
@@ -44,19 +46,20 @@ export default class LoginHandler {
       });
     }
 
-    const roles = await this.authRepository.findRolesOfUser(user.id);
-    const roleIds = roles.map((r) => r.roleId);
+    // const roles = await this.authRepository.findRolesOfUser(user.id);
+    // const roleIds = roles.map((r) => r.roleId);
 
     const tokenVersion = nanoid(5);
+    const roles = [user.role];
     const payload = {
       v: tokenVersion,
       sub: user.id,
-      roles: roleIds,
+      roles,
       // exp: Math.floor(Date.now() / 1000) + 60 * 5, // Token expires in 5 minutes
     };
 
     const [token] = await Promise.all([
-      sign(payload, config.authJwtSecret),
+      sign(payload, config!.authJwtSecret),
       this.authRepository.updateTokenVersion(user.id, tokenVersion),
     ]);
 
@@ -66,8 +69,9 @@ export default class LoginHandler {
         token,
         user: {
           id: user.id,
+          username: user.username,
           fullname: user.fullname,
-          roles: roleIds,
+          roles,
           storeCode: user.storeCode,
         },
       },
@@ -76,9 +80,6 @@ export default class LoginHandler {
 
   async logout(ctx: Context) {
     const jwtPayload = ctx.get("jwtPayload");
-    const query = ctx.req.query();
-    console.log({ query, jwtPayload });
-
     const tokenVersion = nanoid(5);
     await this.authRepository.updateTokenVersion(jwtPayload.sub, tokenVersion);
 

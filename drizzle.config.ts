@@ -1,4 +1,3 @@
-import config from "./src/common/config/index.ts";
 import { defineConfig } from "drizzle-kit";
 
 export default defineConfig({
@@ -6,6 +5,6 @@ export default defineConfig({
   out: "./src/database/migrations",
   dialect: "postgresql",
   dbCredentials: {
-    url: config.databaseUrl,
+    url: Deno.env.get("DATABASE_URL")!,
   },
 });

@@ -1,4 +1,4 @@
-import { sql } from "drizzle-orm";
+import { sql, SQL } from "drizzle-orm";
 import {
   pgTable,
   pgEnum,
@@ -13,7 +13,7 @@ import { ProductStatus } from "../../modules/product/enums/product.enum.ts";
 
 export const productStatus = pgEnum(
   "product_status",
-  Object.values(ProductStatus) as [string, ...string[]],
+  Object.values(ProductStatus) as [string, ...string[]]
 );
 
 export const productTable = pgTable(DbTables.Products, {
@@ -23,7 +23,7 @@ export const productTable = pgTable(DbTables.Products, {
   productName: text("product_name").notNull(),
   sellingPrice: customNumeric("selling_price"),
   costPrice: customNumeric("cost_price"),
-  inventory: customNumeric("inventory"),
+  inventory: integer("inventory"),
   unit: text("unit"),
   category: text("category"),
   supplier: text("supplier"),
@@ -40,6 +40,12 @@ export const productTable = pgTable(DbTables.Products, {
 export type InsertProduct = typeof productTable.$inferInsert;
 export type SelectProduct = typeof productTable.$inferSelect;
 
-export type UpdateProduct = Partial<
+interface ModifiedFields {
+  inventory: SQL;
+}
+
+type UpdateProductType = Partial<
   Omit<SelectProduct, "id" | "productCode" | "createdAt">
->;
+>
+
+export type UpdateProduct = Omit<UpdateProductType, keyof ModifiedFields> & ModifiedFields;

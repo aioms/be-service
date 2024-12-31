@@ -1,4 +1,4 @@
-import { SQL, eq, and, desc, like } from "drizzle-orm";
+import { SQL, eq, and, desc } from "drizzle-orm";
 import { singleton } from "tsyringe";
 import { database } from "../../common/config/database.ts";
 import {
@@ -105,7 +105,7 @@ export class ProductRepository {
     return { data: lastIndexProduct[0].index, error: null };
   }
 
-  async updateProduct(opts: RepositoryOptionUpdate<UpdateProduct>) {
+  async updateProduct(opts: RepositoryOptionUpdate<Partial<UpdateProduct>>) {
     const filters: SQL[] = [...opts.where];
 
     const result = await database

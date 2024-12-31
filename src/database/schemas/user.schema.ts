@@ -21,6 +21,7 @@ export const userTable = pgTable(DbTables.Users, {
   salt: text("salt"),
   fullname: text("fullname"),
   phone: text("phone"),
+  role: text("role"),
   storeCode: text("store_code"),
   status: userStatus("status").notNull(),
   tokenVersion: text("token_version"),
