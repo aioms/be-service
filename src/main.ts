@@ -5,6 +5,7 @@ import { requestId } from "hono/request-id";
 import { logger } from "hono/logger";
 import { compress } from "hono/compress";
 import { showRoutes } from "hono/dev";
+import { timeout } from "hono/timeout";
 
 // Middlewares
 import { corsMiddleware } from "./common/middlewares/cors.ts";
@@ -14,11 +15,15 @@ import AuthModule from "./modules/auth/auth.module.ts";
 import ProductModule from "./modules/product/product.module.ts";
 import InventoryModule from "./modules/inventory/inventory.module.ts";
 
+// Utils
+import { isDev } from "./common/utils/index.ts";
+
 const startServer = () => {
   const app = new Hono();
 
   app.use(compress());
   app.use(logger());
+  app.use(timeout(10_000));
 
   app.use("*", requestId());
   app.use("*", corsMiddleware);
@@ -52,9 +57,11 @@ const startServer = () => {
     );
   });
 
-  showRoutes(app, {
-    verbose: true,
-  });
+  if (!isDev()) {
+    showRoutes(app, {
+      verbose: true,
+    });
+  }
 
   Deno.serve(
     {

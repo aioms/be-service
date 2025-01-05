@@ -2,11 +2,13 @@
   "tasks": {
     "start": "deno run --env --allow-net --allow-env src/main.ts",
     "dev": "deno run --env -A --watch src/main.ts",
+    "test": "deno test --allow-net --allow-env --unstable",
     "init": "deno install --node-modules-dir",
     "studio": "deno run -A npm:drizzle-kit studio",
     "gen:migrations": "deno run -A npm:drizzle-kit generate",
     "run:migrations": "deno run -A npm:drizzle-kit migrate",
-    "dk:check": "deno run -A npm:drizzle-kit check"
+    "db:seed": "deno run --env -A src/database/seeds/init.ts",
+    "db:check": "deno run -A npm:drizzle-kit check"
   },
   "compilerOptions": {
     "jsx": "precompile",
@@ -17,6 +19,7 @@
   },
   "imports": {
     "@hono/zod-validator": "npm:@hono/zod-validator@^0.4.1",
+    "@std/assert": "jsr:@std/assert@^1.0.10",
     "bcryptjs": "npm:bcryptjs@^2.4.3",
     "dayjs": "npm:dayjs@^1.11.13",
     "drizzle-kit": "npm:drizzle-kit@^0.28.1",

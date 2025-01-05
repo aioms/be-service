@@ -127,6 +127,7 @@ export class ProductRepository {
   }
 
   async findCategoriesByCondition(opts: RepositoryOption) {
+    let count: number | null = null;
     const filters: SQL[] = [...opts.where];
 
     const query = database
@@ -137,16 +138,30 @@ export class ProductRepository {
       .where(and(...filters))
       .orderBy(productTable.category);
 
-    const results = await query.execute();
-    if (results.length) {
-      const categories = results.map((r) => r.category);
-      return { data: categories, error: null };
+    if (opts.limit) {
+      query.limit(opts.limit);
     }
 
-    return { data: [], error: new Error("Categories not found") };
+    if (opts.offset) {
+      query.offset(opts.offset);
+    }
+
+    if (opts.isCount) {
+      count = await database.$count(productTable, and(...filters));
+    }
+
+    const results = await query.execute();
+
+    if (!results.length) {
+      return { data: [], error: null, count };
+    }
+
+    const suppliers = results.map((r) => r.category);
+    return { data: suppliers, error: null, count };
   }
 
   async findSuppliersByCondition(opts: RepositoryOption) {
+    let count: number | null = null;
     const filters: SQL[] = [...opts.where];
 
     const query = database
@@ -157,13 +172,26 @@ export class ProductRepository {
       .where(and(...filters))
       .orderBy(productTable.supplier);
 
-    const results = await query.execute();
-    if (results.length) {
-      const suppliers = results.map((r) => r.supplier);
-      return { data: suppliers, error: null };
+    if (opts.limit) {
+      query.limit(opts.limit);
     }
 
-    return { data: results, error: null };
+    if (opts.offset) {
+      query.offset(opts.offset);
+    }
+
+    if (opts.isCount) {
+      count = await database.$count(productTable, and(...filters));
+    }
+
+    const results = await query.execute();
+
+    if (!results.length) {
+      return { data: [], error: null, count };
+    }
+
+    const suppliers = results.map((r) => r.supplier);
+    return { data: suppliers, error: null, count };
   }
 
   async findUnitByCondition(opts: RepositoryOption) {

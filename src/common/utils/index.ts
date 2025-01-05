@@ -2,6 +2,14 @@ import { Context } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { z, ZodIssue } from "zod";
 import { PaginationParams, PaginationResult } from "../types/pagination.d.ts";
+import { Environment } from "../enums/index.ts";
+
+export const isDev = (): boolean =>
+  Deno.env.get("DENO_ENV") === Environment.DEVELOPMENT;
+
+export const getEnv = (): string => {
+  return Deno.env.get("DENO_ENV") || "unknown";
+};
 
 export async function parseBodyJson<T>(ctx: Context) {
   try {

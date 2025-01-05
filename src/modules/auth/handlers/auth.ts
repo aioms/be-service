@@ -40,7 +40,7 @@ export default class LoginHandler {
 
     if (hashedPassword !== user.password) {
       return ctx.json({
-        message: "Wrong password",
+        message: "Sai mật khẩu",
         success: false,
         statusCode: 400,
       });
@@ -55,8 +55,8 @@ export default class LoginHandler {
       v: tokenVersion,
       sub: user.id,
       roles,
-      // exp: Math.floor(Date.now() / 1000) + 60 * 5, // Token expires in 5 minutes
     };
+    console.log({ config, payload });
 
     const [token] = await Promise.all([
       sign(payload, config!.authJwtSecret),

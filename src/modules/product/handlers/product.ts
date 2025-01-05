@@ -231,26 +231,74 @@ export default class ProductHandler {
   }
 
   async getCategories(ctx: Context) {
-    const { data } = await this.productRepository.findCategoriesByCondition({
-      select: {},
-      where: [],
+    const query = ctx.req.query();
+    const { keyword, page, limit } = query;
+    const filters: any = [];
+
+    if (keyword) {
+      filters.push(ilike(productTable.category, `%${keyword}%`));
+    }
+
+    const {
+      page: currentPage,
+      limit: take,
+      offset,
+    } = getPagination({
+      page: +(page || 1),
+      limit: +(limit || 10),
     });
+
+    const { data, count } =
+      await this.productRepository.findCategoriesByCondition({
+        select: {},
+        where: filters,
+        limit: take,
+        offset,
+        isCount: true,
+      });
+
+    const metadata = getPaginationMetadata(currentPage, take, offset, count!);
 
     return ctx.json({
       data,
+      metadata,
       success: true,
       statusCode: 200,
     });
   }
 
   async getSuppliers(ctx: Context) {
-    const { data } = await this.productRepository.findSuppliersByCondition({
-      select: {},
-      where: [],
+    const query = ctx.req.query();
+    const { keyword, page, limit } = query;
+    const filters: any = [];
+
+    if (keyword) {
+      filters.push(ilike(productTable.supplier, `%${keyword}%`));
+    }
+
+    const {
+      page: currentPage,
+      limit: take,
+      offset,
+    } = getPagination({
+      page: +(page || 1),
+      limit: +(limit || 10),
     });
+
+    const { data, count } =
+      await this.productRepository.findSuppliersByCondition({
+        select: {},
+        where: filters,
+        limit: take,
+        offset,
+        isCount: true,
+      });
+
+    const metadata = getPaginationMetadata(currentPage, take, offset, count!);
 
     return ctx.json({
       data,
+      metadata,
       success: true,
       statusCode: 200,
     });

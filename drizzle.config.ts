@@ -7,4 +7,7 @@ export default defineConfig({
   dbCredentials: {
     url: Deno.env.get("DATABASE_URL")!,
   },
+  migrations: {
+    schema: "public",
+  },
 });

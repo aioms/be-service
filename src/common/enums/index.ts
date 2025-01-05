@@ -1,3 +1,9 @@
+export enum Environment {
+  DOCKER = "docker",
+  DEVELOPMENT = "development",
+  PRODUCTION = "production",
+}
+
 export enum Role {
   SUPERVISOR = "supervisor",
   ADMIN = "admin",
