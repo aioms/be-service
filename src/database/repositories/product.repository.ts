@@ -1,4 +1,4 @@
-import { SQL, eq, and, desc } from "drizzle-orm";
+import { SQL, eq, and, desc, sql } from "drizzle-orm";
 import { singleton } from "tsyringe";
 import { database } from "../../common/config/database.ts";
 import {
@@ -26,27 +26,42 @@ export class ProductRepository {
     return { data: result, error: null };
   }
 
-  async createProductOnConflictDoNothing(data: InsertProduct) {
-    const result = await database
+  async createProductOnConflictDoNothing(data: InsertProduct, tx?: any) {
+    return (tx || database)
       .insert(productTable)
       .values(data)
       .onConflictDoNothing({ target: productTable.productCode })
-      .returning({ id: productTable.id });
-    return { data: result, error: null };
+      // .returning({ id: productTable.id });
   }
 
-  async createProductOnConflictDoUpdate(data: InsertProduct) {
-    const result = await database
+  async createProductOnConflictDoUpdate(data: InsertProduct, tx?: any) {
+    return (tx || database)
       .insert(productTable)
       .values(data)
-      .onConflictDoUpdate({ target: productTable.productCode, set: data })
-      .returning({ id: productTable.id });
-    return { data: result, error: null };
+      .onConflictDoUpdate({
+        target: productTable.productCode,
+        set: {
+          index: sql`EXCLUDED.index`,
+          productCode: sql`EXCLUDED.product_code`,
+          productName: sql`EXCLUDED.product_name`,
+          sellingPrice: sql`EXCLUDED.selling_price`,
+          costPrice: sql`EXCLUDED.cost_price`,
+          inventory: sql`EXCLUDED.inventory`,
+          unit: sql`EXCLUDED.unit`,
+          category: sql`EXCLUDED.category`,
+          supplier: sql`EXCLUDED.supplier`,
+          additionalDescription: sql`EXCLUDED.additional_description`,
+          imageUrls: sql`EXCLUDED.image_urls`,
+          warehouseLocation: sql`EXCLUDED.warehouse_location`,
+          status: sql`EXCLUDED.status`,
+        },
+      })
+      // .returning({ id: productTable.id });
   }
 
   async findProductById(
     id: SelectProduct["id"],
-    opts: Pick<RepositoryOption, "select">,
+    opts: Pick<RepositoryOption, "select">
   ): Promise<RepositoryResult> {
     const query = database
       .selectDistinct(opts.select)
@@ -58,7 +73,7 @@ export class ProductRepository {
   }
 
   async findProductsByCondition(
-    opts: RepositoryOption,
+    opts: RepositoryOption
   ): Promise<RepositoryResult> {
     let count: number | null = null;
     const filters: SQL[] = [...opts.where];

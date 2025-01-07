@@ -5,7 +5,7 @@ import { requestId } from "hono/request-id";
 import { logger } from "hono/logger";
 import { compress } from "hono/compress";
 import { showRoutes } from "hono/dev";
-import { timeout } from "hono/timeout";
+// import { timeout } from "hono/timeout";
 
 // Middlewares
 import { corsMiddleware } from "./common/middlewares/cors.ts";
@@ -23,7 +23,7 @@ const startServer = () => {
 
   app.use(compress());
   app.use(logger());
-  app.use(timeout(10_000));
+  // app.use(timeout(10_000));
 
   app.use("*", requestId());
   app.use("*", corsMiddleware);
@@ -57,7 +57,7 @@ const startServer = () => {
     );
   });
 
-  if (!isDev()) {
+  if (isDev()) {
     showRoutes(app, {
       verbose: true,
     });

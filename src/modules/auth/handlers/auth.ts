@@ -56,7 +56,6 @@ export default class LoginHandler {
       sub: user.id,
       roles,
     };
-    console.log({ config, payload });
 
     const [token] = await Promise.all([
       sign(payload, config!.authJwtSecret),

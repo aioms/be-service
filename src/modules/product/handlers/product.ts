@@ -14,15 +14,17 @@ import {
 import {
   getPagination,
   getPaginationMetadata,
+  isFloat,
   parseBodyJson,
 } from "../../../common/utils/index.ts";
 import { generateProductCode } from "../utils/product.util.ts";
 import { ResponseType } from "../../../common/types/index.d.ts";
+import { database } from "../../../common/config/database.ts";
 
 @singleton()
 export default class ProductHandler {
   constructor(
-    @inject(ProductRepository) private productRepository: ProductRepository,
+    @inject(ProductRepository) private productRepository: ProductRepository
   ) {}
 
   async createProduct(ctx: Context) {
@@ -106,7 +108,7 @@ export default class ProductHandler {
       {
         set: dataUpdate,
         where: [eq(productTable.id, id)],
-      },
+      }
     );
 
     if (!productUpdated.length) {
@@ -158,7 +160,7 @@ export default class ProductHandler {
           createdAt: productTable.createdAt,
           updatedAt: productTable.updatedAt,
         },
-      },
+      }
     );
     if (!product) {
       throw new Error("product not found");
@@ -180,8 +182,8 @@ export default class ProductHandler {
       filters.push(
         or(
           ilike(productTable.productCode, `%${keyword}%`),
-          ilike(productTable.productName, `%${keyword}%`),
-        ),
+          ilike(productTable.productName, `%${keyword}%`)
+        )
       );
     }
 
@@ -325,91 +327,113 @@ export default class ProductHandler {
   }
 
   async importProducts(ctx: Context) {
-    // const jwtPayload = ctx.get("jwtPayload");
-    // const userId = jwtPayload.sub;
+    try {
+      const query = ctx.req.query();
+      const body = await ctx.req.parseBody();
 
-    const query = ctx.req.query();
-    const body = await ctx.req.parseBody();
+      if (body["file"] instanceof File) {
+        const file = body["file"];
+        console.log(`Got file sized: ${file.size}`);
 
-    if (body["file"] instanceof File) {
-      const file = body["file"];
-      console.log(`Got file sized: ${file.size}`);
+        const result: ResponseType = await new Promise((resolve) => {
+          const reader = new FileReader();
 
-      const result: ResponseType = await new Promise((resolve) => {
-        const reader = new FileReader();
-
-        reader.onload = async (event: ProgressEvent<FileReader>) => {
-          if (!event.target) {
-            return resolve({
-              success: false,
-              message: "Event target not found",
-              statusCode: 500,
-            });
-          }
-
-          const workbook = XLSX.read(event.target.result, { type: "binary" });
-          const sheetName = workbook.SheetNames[0];
-          const sheet = workbook.Sheets[sheetName];
-          const sheetData: any[] = XLSX.utils.sheet_to_json(sheet);
-
-          for (const row of sheetData) {
-            const code = row["Mã hàng"];
-            const [, index] = code.split("NK");
-
-            if (!index || isNaN(index)) {
+          reader.onload = async (event: ProgressEvent<FileReader>) => {
+            if (!event.target) {
               return resolve({
                 success: false,
-                message: `Product code invalid: ${code}`,
-                statusCode: 400,
+                message: "Event target not found",
+                statusCode: 500,
               });
             }
 
-            const count = parseInt(index);
-            const productCode = generateProductCode(count - 1);
+            const workbook = XLSX.read(event.target.result, { type: "binary" });
+            const sheetName = workbook.SheetNames[0];
+            const sheet = workbook.Sheets[sheetName];
+            const sheetData: any[] = XLSX.utils.sheet_to_json(sheet);
 
-            const product = {
-              index: count,
-              productCode,
-              productName: row["Tên hàng"],
-              sellingPrice: row["Giá bán"],
-              costPrice: row["Giá vốn"],
-              inventory: row["Tồn kho"],
-              unit: row["ĐVT"],
-              category: row["Nhóm hàng(3 Cấp)"],
-              supplier: row["Nhà Cung Cấp"],
-              additionalDescription: row["Mô tả thêm"],
-              imageUrls: row["Hình ảnh (url1,url2...)"]?.split(",") ?? [],
-              warehouseLocation: row["Vị trí"],
-              status: ProductStatus.ACTIVE,
-            };
+            const batchSize = 1000;
+            const batches: any[] = [];
 
-            // Check for duplicates based on product_code
-            if (query.type === "2") {
-              await this.productRepository.createProductOnConflictDoUpdate(
-                product,
-              );
-            } else {
-              await this.productRepository.createProductOnConflictDoNothing(
-                product,
-              );
+            for (let i = 0; i < sheetData.length; i += batchSize) {
+              batches.push(sheetData.slice(i, i + batchSize));
             }
-          }
 
-          resolve({
-            success: true,
-            statusCode: 200,
-          });
-        };
+            await database.transaction(async (tx) => {
+              for (const batch of batches) {
+                const products = batch.map((row) => {
+                  const code = row["Mã hàng"];
+                  const [, index] = code.split("NK");
 
-        reader.readAsArrayBuffer(file);
-      });
+                  if (!index || isNaN(index)) {
+                    return {
+                      success: false,
+                      message: `Product code invalid: ${code}`,
+                      statusCode: 400,
+                    };
+                  }
 
-      return ctx.json(result);
-    } else {
+                  const count = parseInt(index);
+                  const productCode = generateProductCode(count - 1);
+
+                  const product = {
+                    index: count,
+                    productCode,
+                    productName: row["Tên hàng"],
+                    sellingPrice: row["Giá bán"],
+                    costPrice: row["Giá vốn"],
+                    inventory: row["Tồn kho"],
+                    unit: row["ĐVT"],
+                    category: row["Nhóm hàng(3 Cấp)"],
+                    supplier: row["Nhà Cung Cấp"],
+                    additionalDescription: row["Mô tả thêm"],
+                    imageUrls: row["Hình ảnh (url1,url2...)"]?.split(",") ?? [],
+                    warehouseLocation: row["Vị trí"],
+                    status: ProductStatus.ACTIVE,
+                  };
+
+                  return product;
+                });
+
+                const validProducts = products.filter(
+                  (product) => product.success !== false
+                );
+
+                if (query.type === "2") {
+                  await this.productRepository.createProductOnConflictDoUpdate(
+                    validProducts, tx,
+                  );
+                } else {
+                  await this.productRepository.createProductOnConflictDoNothing(
+                    validProducts, tx,
+                  );
+                }
+              }
+            });
+
+            resolve({
+              success: true,
+              statusCode: 200,
+            });
+          };
+
+          reader.readAsArrayBuffer(file);
+        });
+
+        return ctx.json(result);
+      } else {
+        return ctx.json({
+          success: false,
+          message: "File not found",
+          statusCode: 400,
+        });
+      }
+    } catch (error) {
       return ctx.json({
         success: false,
-        message: "File not found",
-        statusCode: 400,
+        message: error.message,
+        statusCode: 500,
+        error,
       });
     }
   }
