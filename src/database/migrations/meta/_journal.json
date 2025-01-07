@@ -5,29 +5,8 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1733025465402,
-      "tag": "0000_premium_zarek",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1734195219858,
-      "tag": "0001_clever_bloodstrike",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1735453241042,
-      "tag": "0002_jazzy_green_goblin",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "7",
-      "when": 1736249988413,
-      "tag": "0003_grey_blue_marvel",
+      "when": 1736261445060,
+      "tag": "0000_nappy_brood",
       "breakpoints": true
     }
   ]

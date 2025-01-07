@@ -1,7 +1,9 @@
 CREATE TYPE "public"."product_status" AS ENUM('draft', 'active', 'inactive');--> statement-breakpoint
 CREATE TYPE "public"."receipt_import_status" AS ENUM('draft', 'processing', 'completed', 'cancelled', 'short_received', 'over_received');--> statement-breakpoint
+CREATE TYPE "public"."receipt_return_status" AS ENUM('draft', 'processing', 'completed', 'cancelled');--> statement-breakpoint
+CREATE TYPE "public"."receipt_return_type" AS ENUM('customer', 'supplier');--> statement-breakpoint
 CREATE TYPE "public"."user_status" AS ENUM('active', 'inactive');--> statement-breakpoint
-CREATE TABLE IF NOT EXISTS "products" (
+CREATE TABLE "products" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"index" integer,
 	"product_code" text,
@@ -22,7 +24,7 @@ CREATE TABLE IF NOT EXISTS "products" (
 	CONSTRAINT "products_product_code_unique" UNIQUE("product_code")
 );
 --> statement-breakpoint
-CREATE TABLE IF NOT EXISTS "receipt_imports" (
+CREATE TABLE "receipt_imports" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"receipt_number" text,
 	"note" text,
@@ -35,12 +37,13 @@ CREATE TABLE IF NOT EXISTS "receipt_imports" (
 	"expected_import_date" timestamp,
 	"status" "receipt_import_status" NOT NULL,
 	"user_created" uuid NOT NULL,
+	"status_change_logs" jsonb,
 	"created_at" timestamp DEFAULT now(),
 	"updated_at" timestamp,
 	CONSTRAINT "receipt_imports_receipt_number_unique" UNIQUE("receipt_number")
 );
 --> statement-breakpoint
-CREATE TABLE IF NOT EXISTS "receipt_items" (
+CREATE TABLE "receipt_items" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"receipt_id" uuid NOT NULL,
 	"product_id" uuid NOT NULL,
@@ -52,20 +55,39 @@ CREATE TABLE IF NOT EXISTS "receipt_items" (
 	"updated_at" timestamp
 );
 --> statement-breakpoint
-CREATE TABLE IF NOT EXISTS "roles" (
+CREATE TABLE "receipt_returns" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"receipt_number" text,
+	"name" text,
+	"note" text,
+	"quantity" integer NOT NULL,
+	"total_product" integer NOT NULL,
+	"total_amount" numeric NOT NULL,
+	"reason" text,
+	"warehouse_location" text,
+	"status" "receipt_return_status" NOT NULL,
+	"type" "receipt_return_type" NOT NULL,
+	"return_date" timestamp,
+	"user_created" uuid NOT NULL,
+	"created_at" timestamp DEFAULT now(),
+	"updated_at" timestamp,
+	CONSTRAINT "receipt_returns_receipt_number_unique" UNIQUE("receipt_number")
+);
+--> statement-breakpoint
+CREATE TABLE "roles" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"name" text NOT NULL,
 	"created_at" timestamp DEFAULT now(),
 	CONSTRAINT "roles_name_unique" UNIQUE("name")
 );
 --> statement-breakpoint
-CREATE TABLE IF NOT EXISTS "user_roles" (
+CREATE TABLE "user_roles" (
 	"user_id" uuid NOT NULL,
 	"role_id" uuid NOT NULL,
 	CONSTRAINT "user_roles_user_id_role_id_pk" PRIMARY KEY("user_id","role_id")
 );
 --> statement-breakpoint
-CREATE TABLE IF NOT EXISTS "users" (
+CREATE TABLE "users" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"username" text,
 	"password" text,
@@ -83,14 +105,5 @@ CREATE TABLE IF NOT EXISTS "users" (
 	CONSTRAINT "users_username_unique" UNIQUE("username")
 );
 --> statement-breakpoint
-DO $$ BEGIN
- ALTER TABLE "user_roles" ADD CONSTRAINT "user_roles_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;
-EXCEPTION
- WHEN duplicate_object THEN null;
-END $$;
---> statement-breakpoint
-DO $$ BEGIN
- ALTER TABLE "user_roles" ADD CONSTRAINT "user_roles_role_id_roles_id_fk" FOREIGN KEY ("role_id") REFERENCES "public"."roles"("id") ON DELETE no action ON UPDATE no action;
-EXCEPTION
- WHEN duplicate_object THEN null;
-END $$;
+ALTER TABLE "user_roles" ADD CONSTRAINT "user_roles_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "user_roles" ADD CONSTRAINT "user_roles_role_id_roles_id_fk" FOREIGN KEY ("role_id") REFERENCES "public"."roles"("id") ON DELETE no action ON UPDATE no action;
