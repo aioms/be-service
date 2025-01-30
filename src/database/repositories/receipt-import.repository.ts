@@ -60,6 +60,19 @@ export class ReceiptImportRepository {
     return { data: result, error: null };
   }
 
+  async findReceiptImportByReceiptNumber(
+    receiptNumber: SelectReceiptImport["receiptNumber"],
+    opts: Pick<RepositoryOption, "select">
+  ): Promise<RepositoryResult> {
+    const query = database
+      .selectDistinct(opts.select)
+      .from(receiptImportTable)
+      .where(and(eq(receiptImportTable.receiptNumber, receiptNumber)));
+
+    const [result] = await query.execute();
+    return { data: result, error: null };
+  }
+
   async findReceiptsImportByCondition(
     opts: RepositoryOption
   ): Promise<RepositoryResult> {

@@ -14,6 +14,7 @@ import { corsMiddleware } from "./common/middlewares/cors.ts";
 import AuthModule from "./modules/auth/auth.module.ts";
 import ProductModule from "./modules/product/product.module.ts";
 import InventoryModule from "./modules/inventory/inventory.module.ts";
+import ReceiptModule from "./modules/receipt/receipt.module.ts";
 
 // Utils
 import { isDev } from "./common/utils/index.ts";
@@ -31,6 +32,7 @@ const startServer = () => {
   AuthModule.init(app);
   ProductModule.init(app);
   InventoryModule.init(app);
+  ReceiptModule.init(app);
 
   app.get("/ping", (c) => {
     return c.text("PONG!");

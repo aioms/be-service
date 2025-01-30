@@ -1,4 +1,4 @@
-import { SQL, eq, and, isNull, desc } from "drizzle-orm";
+import { SQL, eq, and, isNull, desc, not } from "drizzle-orm";
 import { singleton } from "tsyringe";
 import { database } from "../../common/config/database.ts";
 import { InsertUser, SelectUser, userTable } from "../schemas/user.schema.ts";
@@ -59,7 +59,11 @@ export class UserRepository {
     opts: RepositoryOption,
   ): Promise<RepositoryResult> {
     let count: number | null = null;
-    const filters: SQL[] = [isNull(userTable.deletedAt), ...opts.where];
+    const filters: SQL[] = [
+      isNull(userTable.deletedAt),
+      not(eq(userTable.role, "supervisor")),
+      ...opts.where,
+    ];
 
     const query = database
       .select(opts.select)
@@ -93,7 +97,11 @@ export class UserRepository {
       Partial<Omit<SelectUser, "id" | "password" | "createdAt">>
     >,
   ) {
-    const filters: SQL[] = [isNull(userTable.deletedAt), ...opts.where];
+    const filters: SQL[] = [
+      isNull(userTable.deletedAt),
+      not(eq(userTable.role, "supervisor")),
+      ...opts.where,
+    ];
 
     const result = await database
       .update(userTable)
@@ -105,7 +113,9 @@ export class UserRepository {
   }
 
   async deleteUser(id: SelectUser["id"]) {
-    const result = await database.delete(userTable).where(eq(userTable.id, id));
+    const result = await database
+      .delete(userTable)
+      .where(and(eq(userTable.id, id), not(eq(userTable.role, "supervisor"))));
     return { data: result, error: null };
   }
 

@@ -97,6 +97,10 @@ export default class ProductController {
       this.receiptImportHandler.getReceiptsByFilter(c),
     );
 
+    route.get("/receipt-imports/receipt-items/:receiptNumber", authenticate, (c) =>
+      this.receiptImportHandler.getReceiptItemsByBarcode(c),
+    );
+
     /**
      * RECEIPT RETURN
      */
@@ -118,6 +122,10 @@ export default class ProductController {
 
     route.get("/receipt-return", authenticate, (c) =>
       this.receiptReturnHandler.getReceiptsByFilter(c),
+    );
+
+    route.get("/receipt-return/receipt-items/:receiptNumber", authenticate, (c) =>
+      this.receiptReturnHandler.getReceiptItemsByBarcode(c),
     );
 
     app.route(this.path, route);

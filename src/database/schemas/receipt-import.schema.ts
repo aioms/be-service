@@ -18,7 +18,7 @@ export const receiptImportStatus = pgEnum(
 
 export const receiptImportTable = pgTable(DbTables.ReceiptImports, {
   id: uuid("id").primaryKey().defaultRandom(),
-  receiptNumber: text("receipt_number").unique(),
+  receiptNumber: text("receipt_number").unique().notNull(),
   note: text("note"),
   quantity: integer("quantity"),
   totalProduct: integer("total_product"),

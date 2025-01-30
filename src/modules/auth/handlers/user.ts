@@ -172,17 +172,24 @@ export default class UserHandler {
 
   async getUsersByFilter(ctx: Context) {
     const query = ctx.req.query();
-    const { keyword, status } = query;
+    const { keyword, status, role } = query;
     const filters: any = [];
 
     if (keyword) {
       filters.push(
-        or(ilike(userTable.fullname, keyword), ilike(userTable.phone, keyword)),
+        or(
+          ilike(userTable.fullname, `%${keyword}%`),
+          ilike(userTable.phone, `%${keyword}%`),
+        ),
       );
     }
 
     if (status) {
       filters.push(eq(userTable.status, status));
+    }
+
+    if (role) {
+      filters.push(eq(userTable.role, role));
     }
 
     const { page, limit, offset } = getPagination({
@@ -194,6 +201,7 @@ export default class UserHandler {
       await this.userRepository.findUsersByCondition({
         select: {
           id: userTable.id,
+          code: userTable.code,
           username: userTable.username,
           fullname: userTable.fullname,
           phone: userTable.phone,

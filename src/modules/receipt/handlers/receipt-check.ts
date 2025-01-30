@@ -1,76 +1,63 @@
 import { singleton, inject } from "tsyringe";
 import { Context } from "hono";
-import { between, desc, eq, ilike, or } from "drizzle-orm";
+import { sql, between, desc, eq, ilike, or, sum } from "drizzle-orm";
 import dayjs from "dayjs";
 
 // REPOSITORY
-import { ReceiptImportRepository } from "../../../database/repositories/receipt-import.repository.ts";
+import { ReceiptCheckRepository } from "../../../database/repositories/receipt-check.repository.ts";
 import { ReceiptItemRepository } from "../../../database/repositories/receipt-item.repository.ts";
 
 // SCHEMA
 import {
-  InsertReceiptImport,
-  receiptImportTable,
-  UpdateReceiptImport,
-} from "../../../database/schemas/receipt-import.schema.ts";
+  InsertReceiptCheck,
+  receiptCheckTable,
+  UpdateReceiptCheck,
+} from "../../../database/schemas/receipt-check.schema.ts";
 import { receiptItemTable } from "../../../database/schemas/receipt-item.schema.ts";
 
 // DTO
 import {
-  CreateReceiptImportRequestDto,
-  UpdateReceiptImportRequestDto,
-} from "../dtos/receipt-import.dto.ts";
+  CreateReceiptCheckRequestDto,
+  UpdateReceiptCheckRequestDto,
+} from "../dtos/receipt-check.dto.ts";
 
 import {
   getPagination,
   getPaginationMetadata,
   parseBodyJson,
 } from "../../../common/utils/index.ts";
+import { ReceiptCheckStatus } from "../enums/receipt.enum.ts";
+import { userTable } from "../../../database/schemas/user.schema.ts";
 
 @singleton()
-export default class ReceiptImportHandler {
+export default class ReceiptCheckHandler {
   constructor(
-    @inject(ReceiptImportRepository)
-    private receiptRepository: ReceiptImportRepository,
+    @inject(ReceiptCheckRepository)
+    private receiptRepository: ReceiptCheckRepository,
     @inject(ReceiptItemRepository)
-    private receiptItemRepository: ReceiptItemRepository
+    private receiptItemRepository: ReceiptItemRepository,
   ) {}
 
   async createReceipt(ctx: Context) {
     const jwtPayload = ctx.get("jwtPayload");
     const userId = jwtPayload.sub;
 
-    const body = await parseBodyJson<CreateReceiptImportRequestDto>(ctx);
-    const {
-      note,
-      quantity,
-      totalAmount,
-      totalProduct,
-      supplier,
-      warehouseLocation,
-      paymentDate,
-      expectedImportDate,
-      status,
-      items,
-    } = body;
+    const body = await parseBodyJson<CreateReceiptCheckRequestDto>(ctx);
+    const { periodic, checker, supplier, date, note, items } = body;
 
-    const receiptNumber = `NH${dayjs().format("YYMMDDHHmm")}`;
-    const receiptImportData: InsertReceiptImport = {
+    const receiptNumber = `KIEM${dayjs().format("YYMMDDHHmm")}`;
+    const receiptImportData: InsertReceiptCheck = {
       receiptNumber,
-      note,
-      quantity,
-      totalAmount,
-      totalProduct,
+      periodic,
       supplier,
-      warehouseLocation,
-      paymentDate,
-      expectedImportDate,
-      status,
+      date,
+      note,
+      status: ReceiptCheckStatus.PENDING,
+      checker,
       userCreated: userId,
     };
-    const { data } = await this.receiptRepository.createReceiptImport(
-      receiptImportData
-    );
+    const { data } =
+      await this.receiptRepository.createReceiptCheck(receiptImportData);
 
     if (!data.length) {
       throw new Error("Can't create receipt");
@@ -94,21 +81,21 @@ export default class ReceiptImportHandler {
 
   async updateReceipt(ctx: Context) {
     const id = ctx.req.param("id");
-    const body = await parseBodyJson<UpdateReceiptImportRequestDto>(ctx);
-    const { items, ...newReceiptImportData } = body;
+    const body = await parseBodyJson<UpdateReceiptCheckRequestDto>(ctx);
+    const { items, ...payload } = body;
 
-    const dataUpdate: UpdateReceiptImport = {
-      ...newReceiptImportData,
+    const dataUpdate: UpdateReceiptCheck = {
+      ...payload,
       updatedAt: dayjs().toISOString(),
     };
 
-    const { data } = await this.receiptRepository.updateReceiptImport({
+    const { data } = await this.receiptRepository.updateReceiptCheck({
       set: dataUpdate,
-      where: [eq(receiptImportTable.id, id)],
+      where: [eq(receiptCheckTable.id, id)],
     });
 
     if (!data.length) {
-      throw new Error("Can't update receipt import");
+      throw new Error("Can't update receipt check");
     }
 
     // Delete old receipt items
@@ -133,7 +120,7 @@ export default class ReceiptImportHandler {
   async deleteReceipt(ctx: Context) {
     const id = ctx.req.param("id");
 
-    const { data } = await this.receiptRepository.deleteReceiptImport(id);
+    const { data } = await this.receiptRepository.deleteReceiptCheck(id);
     if (!data.length) {
       throw new Error("Receipt not found");
     }
@@ -151,23 +138,22 @@ export default class ReceiptImportHandler {
   async getReceiptById(ctx: Context) {
     const receiptId = ctx.req.param("id");
 
-    const { data: receipt } =
-      await this.receiptRepository.findReceiptImportById(receiptId, {
+    const { data: receipt } = await this.receiptRepository.findReceiptCheckById(
+      receiptId,
+      {
         select: {
-          id: receiptImportTable.id,
-          receiptNumber: receiptImportTable.receiptNumber,
-          note: receiptImportTable.note,
-          quantity: receiptImportTable.quantity,
-          totalProduct: receiptImportTable.totalProduct,
-          totalAmount: receiptImportTable.totalAmount,
-          supplier: receiptImportTable.supplier,
-          warehouseLocation: receiptImportTable.warehouseLocation,
-          paymentDate: receiptImportTable.paymentDate,
-          expectedImportDate: receiptImportTable.expectedImportDate,
-          status: receiptImportTable.status,
-          createdAt: receiptImportTable.createdAt,
+          id: receiptCheckTable.id,
+          receiptNumber: receiptCheckTable.receiptNumber,
+          note: receiptCheckTable.note,
+          supplier: receiptCheckTable.supplier,
+          periodic: receiptCheckTable.periodic,
+          date: receiptCheckTable.date,
+          status: receiptCheckTable.status,
+          checker: receiptCheckTable.checker,
+          createdAt: receiptCheckTable.createdAt,
         },
-      });
+      },
+    );
 
     if (!receipt) {
       throw new Error("receipt not found");
@@ -199,14 +185,14 @@ export default class ReceiptImportHandler {
     const receiptNumber = ctx.req.param("receiptNumber");
 
     const { data: receipt } =
-      await this.receiptRepository.findReceiptImportByReceiptNumber(
+      await this.receiptRepository.findReceiptCheckByReceiptNumber(
         receiptNumber,
         {
           select: {
-            id: receiptImportTable.id,
-            receiptNumber: receiptImportTable.receiptNumber,
+            id: receiptCheckTable.id,
+            receiptNumber: receiptCheckTable.receiptNumber,
           },
-        }
+        },
       );
 
     if (!receipt) {
@@ -238,26 +224,26 @@ export default class ReceiptImportHandler {
   async getReceiptsByFilter(ctx: Context) {
     const query = ctx.req.query();
 
-    const { keyword, status, importDate } = query;
+    const { keyword, status, date } = query;
     const filters: any = [];
 
     if (keyword) {
       filters.push(
         or(
-          ilike(receiptImportTable.receiptNumber, `%${keyword}%`),
-          ilike(receiptImportTable.supplier, `%${keyword}%`)
-        )
+          ilike(receiptCheckTable.receiptNumber, `%${keyword}%`),
+          ilike(receiptCheckTable.supplier, `%${keyword}%`),
+        ),
       );
     }
 
     if (status) {
-      filters.push(eq(receiptImportTable.status, status));
+      filters.push(eq(receiptCheckTable.status, status));
     }
 
-    if (importDate) {
-      const start = dayjs(importDate).startOf("day").format();
-      const end = dayjs(importDate).endOf("day").format();
-      filters.push(between(receiptImportTable.expectedImportDate, start, end));
+    if (date) {
+      const start = dayjs(date).startOf("day").format();
+      const end = dayjs(date).endOf("day").format();
+      filters.push(between(receiptCheckTable.date, start, end));
     }
 
     const { page, limit, offset } = getPagination({
@@ -266,23 +252,34 @@ export default class ReceiptImportHandler {
     });
 
     const { data: receipts, count } =
-      await this.receiptRepository.findReceiptsImportByCondition({
+      await this.receiptRepository.findReceiptsCheckByCondition({
         select: {
-          id: receiptImportTable.id,
-          receiptNumber: receiptImportTable.receiptNumber,
-          note: receiptImportTable.note,
-          quantity: receiptImportTable.quantity,
-          totalProduct: receiptImportTable.totalProduct,
-          totalAmount: receiptImportTable.totalAmount,
-          supplier: receiptImportTable.supplier,
-          warehouseLocation: receiptImportTable.warehouseLocation,
-          paymentDate: receiptImportTable.paymentDate,
-          expectedImportDate: receiptImportTable.expectedImportDate,
-          status: receiptImportTable.status,
-          createdAt: receiptImportTable.createdAt,
+          id: receiptCheckTable.id,
+          receiptNumber: receiptCheckTable.receiptNumber,
+          note: receiptCheckTable.note,
+          supplier: receiptCheckTable.supplier,
+          periodic: receiptCheckTable.periodic,
+          checker: {
+            fullname: userTable.fullname,
+          },
+          systemInventory: sum(receiptItemTable.inventory).mapWith(Number),
+          actualInventory: sum(receiptItemTable.actualInventory).mapWith(
+            Number,
+          ),
+          totalDifference:
+            sql<number>`SUM(${receiptItemTable.actualInventory} - ${receiptItemTable.inventory})`.mapWith(
+              Number,
+            ),
+          totalValueDifference:
+            sql<number>`SUM((${receiptItemTable.actualInventory} - ${receiptItemTable.inventory}) * ${receiptItemTable.costPrice})`.mapWith(
+              Number,
+            ),
+          date: receiptCheckTable.date,
+          status: receiptCheckTable.status,
+          createdAt: receiptCheckTable.createdAt,
         },
         where: filters,
-        orderBy: [desc(receiptImportTable.createdAt)],
+        orderBy: [desc(receiptCheckTable.createdAt)],
         limit,
         offset,
         isCount: true,

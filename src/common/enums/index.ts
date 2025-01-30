@@ -26,3 +26,9 @@ export enum HttpStatusCode {
   NotFound = 404,
   InternalServerError = 500,
 }
+
+export enum CommonStatus {
+  Active = "active",
+  Inactive = "inactive",
+  Deleted = "deleted",
+}

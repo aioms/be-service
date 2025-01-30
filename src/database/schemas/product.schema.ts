@@ -23,6 +23,7 @@ export const productTable = pgTable(DbTables.Products, {
   productName: text("product_name").notNull(),
   sellingPrice: customNumeric("selling_price"),
   costPrice: customNumeric("cost_price"),
+  discount: customNumeric("discount"),
   inventory: customNumeric("inventory"),
   unit: text("unit"),
   category: text("category"),

@@ -262,4 +262,44 @@ export default class ReceiptReturnHandler {
       statusCode: 200,
     });
   }
+
+  async getReceiptItemsByBarcode(ctx: Context) {
+    const receiptNumber = ctx.req.param("receiptNumber");
+
+    const { data: receipt } =
+      await this.receiptRepository.findReceiptReturnByReceiptNumber(
+        receiptNumber,
+        {
+          select: {
+            id: receiptReturnTable.id,
+            receiptNumber: receiptReturnTable.receiptNumber,
+          },
+        }
+      );
+
+    if (!receipt) {
+      throw new Error("receipt not found");
+    }
+
+    const { data: receiptItems } =
+      await this.receiptItemRepository.findReceiptItemsByCondition({
+        select: {
+          id: receiptItemTable.id,
+          productCode: receiptItemTable.productCode,
+          productName: receiptItemTable.productName,
+          quantity: receiptItemTable.quantity,
+          costPrice: receiptItemTable.costPrice,
+        },
+        where: [eq(receiptItemTable.receiptId, receipt.id)],
+      });
+
+    return ctx.json({
+      data: {
+        receipt,
+        items: receiptItems,
+      },
+      success: true,
+      statusCode: 200,
+    });
+  }
 }

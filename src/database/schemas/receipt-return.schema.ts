@@ -25,7 +25,7 @@ export const receiptReturnType = pgEnum(
 
 export const receiptReturnTable = pgTable(DbTables.ReceiptReturns, {
   id: uuid("id").primaryKey().defaultRandom(),
-  receiptNumber: text("receipt_number").unique(),
+  receiptNumber: text("receipt_number").unique().notNull(),
   name: text("name"),
   note: text("note"),
   quantity: integer("quantity").notNull(),

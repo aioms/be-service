@@ -16,6 +16,7 @@ export const userStatus = pgEnum(
 
 export const userTable = pgTable(DbTables.Users, {
   id: uuid("id").primaryKey().defaultRandom(),
+  code: text("code").unique(),
   username: text("username").unique(),
   password: text("password"),
   salt: text("salt"),

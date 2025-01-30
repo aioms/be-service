@@ -92,4 +92,17 @@ export class ReceiptReturnRepository {
     const results = await query.execute();
     return { data: results, error: null, count };
   }
+
+  async findReceiptReturnByReceiptNumber(
+    receiptNumber: SelectReceiptReturn["receiptNumber"],
+    opts: Pick<RepositoryOption, "select">
+  ): Promise<RepositoryResult> {
+    const query = database
+      .selectDistinct(opts.select)
+      .from(receiptReturnTable)
+      .where(and(eq(receiptReturnTable.receiptNumber, receiptNumber)));
+
+    const [result] = await query.execute();
+    return { data: result, error: null };
+  }
 }

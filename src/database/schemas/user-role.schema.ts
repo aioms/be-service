@@ -13,15 +13,15 @@ export const userRoleTable = pgTable(
       .notNull()
       .references(() => roleTable.id),
   },
-  (table) => {
-    return {
-      pk: primaryKey({ columns: [table.userId, table.roleId] }),
-      pkWithCustomName: primaryKey({
-        name: "user_role_pk",
-        columns: [table.userId, table.roleId],
-      }),
-    };
-  },
+  // (table) => {
+  //   return {
+  //     pk: primaryKey({ columns: [table.userId, table.roleId] }),
+  //     pkWithCustomName: primaryKey({
+  //       name: "user_role_pk",
+  //       columns: [table.userId, table.roleId],
+  //     }),
+  //   };
+  // },
 );
 
 export type InsertUserRole = typeof userRoleTable.$inferInsert;
