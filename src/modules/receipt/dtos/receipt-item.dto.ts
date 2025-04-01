@@ -12,4 +12,5 @@ export interface UpdateReceiptItemRequestDto {
   productName: string;
   quantity: number;
   costPrice: number;
+  actualInventory: number;
 }

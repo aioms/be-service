@@ -4,6 +4,7 @@
     "jsr:@std/assert@^1.0.10": "1.0.10",
     "jsr:@std/internal@^1.0.5": "1.0.5",
     "npm:@hono/zod-validator@~0.4.1": "0.4.2_hono@4.6.5_zod@3.24.1",
+    "npm:@types/node@*": "22.5.4",
     "npm:bcryptjs@^2.4.3": "2.4.3",
     "npm:create-hono@latest": "0.14.1",
     "npm:dayjs@^1.11.13": "1.11.13",
@@ -12,7 +13,7 @@
     "npm:drizzle-orm@~0.38.3": "0.38.3_postgres@3.4.4",
     "npm:drizzle-seed@~0.1.2": "0.1.3_drizzle-orm@0.38.3__postgres@3.4.4_postgres@3.4.4",
     "npm:hono@^4.6.5": "4.6.5",
-    "npm:nanoid@^5.0.7": "5.0.7",
+    "npm:nanoid@^5.0.9": "5.0.9",
     "npm:postgres@^3.4.4": "3.4.4",
     "npm:reflect-metadata@~0.2.2": "0.2.2",
     "npm:tsyringe@^4.8.0": "4.8.0",
@@ -190,6 +191,12 @@
         "zod"
       ]
     },
+    "@types/node@22.5.4": {
+      "integrity": "sha512-FDuKUJQm/ju9fT/SeX/6+gBzoPzlVCzfzmGkwKvRHQVxi4BntVbyIwf6a4Xn62mrvndLiml6z/UBXIdEVjQLXg==",
+      "dependencies": [
+        "undici-types"
+      ]
+    },
     "adler-32@1.3.1": {
       "integrity": "sha512-ynZ4w/nUUv5rrsR8UUGoe1VC9hZj6V5hU9Qw1HlMDJGEJw5S7TfTErWTjMys6M7vr0YWcPqs3qAr4ss0nDfP+A=="
     },
@@ -323,8 +330,8 @@
     "ms@2.1.3": {
       "integrity": "sha512-6FlzubTLZG3J2a/NVCAleEhjzq5oxgHyaCU9yYXvcLsvoVaHJq/s5xXI6/XXP6tz7R9xAOtHnSO/tXtF3WRTlA=="
     },
-    "nanoid@5.0.7": {
-      "integrity": "sha512-oLxFY2gd2IqnjcYyOXD8XGCftpGtZP2AbHbOkthDkvRywH5ayNtPVy9YlOPcHckXzbLTCHpkb7FB+yuxKV13pQ=="
+    "nanoid@5.0.9": {
+      "integrity": "sha512-Aooyr6MXU6HpvvWXKoVoXwKMs/KyVakWwg7xQfv5/S/RIgJMy0Ifa45H9qqYy7pTCszrHzP21Uk4PZq2HpEM8Q=="
     },
     "postgres@3.4.4": {
       "integrity": "sha512-IbyN+9KslkqcXa8AO9fxpk97PA4pzewvpi2B3Dwy9u4zpV32QicaEdgmF3eSQUzdRk7ttDHQejNgAEr4XoeH4A=="
@@ -363,6 +370,9 @@
         "tslib"
       ]
     },
+    "undici-types@6.19.8": {
+      "integrity": "sha512-ve2KP6f/JnbPBFyobGHuerC9g1FYGn/F8n1LWTwNxCEzd6IfqTwUQcNXgEtmmQ6DlRrC1hrSrBnCZPokRrDHjw=="
+    },
     "wmf@1.0.2": {
       "integrity": "sha512-/p9K7bEh0Dj6WbXg4JG0xvLQmIadrner1bi45VMJTfnbVHsc7yIajZyoSoK60/dtVBs12Fm6WkUI5/3WAVsNMw=="
     },
@@ -385,8 +395,17 @@
       "integrity": "sha512-muH7gBL9sI1nciMZV67X5fTKKBLtwpZ5VBp1vsOQzj1MhrBZ4wlVCm3gedKZWLp0Oyel8sIGfeiz54Su+OVT+A=="
     }
   },
+  "redirects": {
+    "https://deno.land/x/nanoid/mod.ts": "https://deno.land/x/nanoid@v3.0.0/mod.ts"
+  },
   "remote": {
-    "https://cdn.sheetjs.com/xlsx-0.20.3/package/xlsx.mjs": "1a0fb062ee9781b13f6687371b202aaefc53b6ce55b530c027e01f9c087b77db"
+    "https://cdn.sheetjs.com/xlsx-0.20.3/package/xlsx.mjs": "1a0fb062ee9781b13f6687371b202aaefc53b6ce55b530c027e01f9c087b77db",
+    "https://deno.land/x/nanoid@v3.0.0/customAlphabet.ts": "1cfd7cfd2f07ca8d78a7e7855fcc9f59abf01ef2a127484ef94328fadf940ead",
+    "https://deno.land/x/nanoid@v3.0.0/customRandom.ts": "af56e19038c891a4b4ef2be931554c27579bd407ee5bbea5cb64f6ee1347cbe3",
+    "https://deno.land/x/nanoid@v3.0.0/mod.ts": "3ead610e40c58d8fdca21d5da9ec661445a2b82526e19c34d05de5f90be8a1be",
+    "https://deno.land/x/nanoid@v3.0.0/nanoid.ts": "8d119bc89a0f34e7bbe0c2dbdc280d01753e431af553d189663492310a31085d",
+    "https://deno.land/x/nanoid@v3.0.0/random.ts": "4da71d5f72f2bfcc6a4ee79b5d4e72f48dcf4fe4c3835fd5ebab08b9f33cd598",
+    "https://deno.land/x/nanoid@v3.0.0/urlAlphabet.ts": "8b1511deb1ecb23c66202b6000dc10fb68f9a96b5550c6c8cef5009324793431"
   },
   "workspace": {
     "dependencies": [
@@ -398,7 +417,7 @@
       "npm:drizzle-orm@~0.38.3",
       "npm:drizzle-seed@~0.1.2",
       "npm:hono@^4.6.5",
-      "npm:nanoid@^5.0.7",
+      "npm:nanoid@^5.0.9",
       "npm:postgres@^3.4.4",
       "npm:reflect-metadata@~0.2.2",
       "npm:tsyringe@^4.8.0",

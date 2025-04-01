@@ -7,8 +7,7 @@ import { authenticate } from "../../common/middlewares/verify-jwt.ts";
 import ReceiptCheckHandler from "./handlers/receipt-check.ts";
 
 export default class ReceiptController {
-  private readonly receiptCheckHandler =
-    container.resolve(ReceiptCheckHandler);
+  private readonly receiptCheckHandler = container.resolve(ReceiptCheckHandler);
 
   private readonly path = "/api/v1";
 
@@ -26,6 +25,16 @@ export default class ReceiptController {
       this.receiptCheckHandler.updateReceipt(c),
     );
 
+    route.patch(
+      "/receipt-check/:id/receipt-items/:productCode",
+      authenticate,
+      (c) => this.receiptCheckHandler.updateActualInventoryByReceiptItem(c),
+    );
+
+    route.patch("/receipt-check/:id/balance", authenticate, (c) =>
+      this.receiptCheckHandler.updateBalanceReceipt(c),
+    );
+
     route.delete("/receipt-check/:id", authenticate, (c) =>
       this.receiptCheckHandler.deleteReceipt(c),
     );
@@ -38,8 +47,10 @@ export default class ReceiptController {
       this.receiptCheckHandler.getReceiptsByFilter(c),
     );
 
-    route.get("/receipt-check/receipt-items/:receiptNumber", authenticate, (c) =>
-      this.receiptCheckHandler.getReceiptItemsByBarcode(c),
+    route.get(
+      "/receipt-check/receipt-items/:receiptNumber",
+      authenticate,
+      (c) => this.receiptCheckHandler.getReceiptItemsByBarcode(c),
     );
 
     app.route(this.path, route);

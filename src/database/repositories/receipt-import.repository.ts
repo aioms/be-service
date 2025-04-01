@@ -12,24 +12,28 @@ import {
   UpdateReceiptImport,
   SelectReceiptImport,
 } from "../schemas/receipt-import.schema.ts";
+import { supplierTable } from "../schemas/supplier.schema.ts";
+import { PgTx } from "../custom/data-types.ts";
 
 @singleton()
 export class ReceiptImportRepository {
   /**
    * RECEIPT IMPORT
    */
-  async createReceiptImport(data: InsertReceiptImport) {
-    const result = await database
+  async createReceiptImport(data: InsertReceiptImport, tx?: PgTx) {
+    const db = tx || database;
+    const result = await db
       .insert(receiptImportTable)
       .values(data)
       .returning({ id: receiptImportTable.id });
     return { data: result, error: null };
   }
 
-  async updateReceiptImport(opts: RepositoryOptionUpdate<UpdateReceiptImport>) {
+  async updateReceiptImport(opts: RepositoryOptionUpdate<UpdateReceiptImport>, tx?: PgTx) {
+    const db = tx || database;
     const filters: SQL[] = [...opts.where];
 
-    const result = await database
+    const result = await db
       .update(receiptImportTable)
       .set(opts.set)
       .where(and(...filters))
@@ -38,8 +42,9 @@ export class ReceiptImportRepository {
     return { data: result, error: null };
   }
 
-  async deleteReceiptImport(id: SelectReceiptImport["id"]) {
-    const result = await database
+  async deleteReceiptImport(id: SelectReceiptImport["id"], tx?: PgTx) {
+    const db = tx || database;
+    const result = await db
       .delete(receiptImportTable)
       .where(eq(receiptImportTable.id, id))
       .returning({ id: receiptImportTable.id });
@@ -54,6 +59,7 @@ export class ReceiptImportRepository {
     const query = database
       .selectDistinct(opts.select)
       .from(receiptImportTable)
+      .leftJoin(supplierTable, eq(supplierTable.id, receiptImportTable.supplier))
       .where(and(eq(receiptImportTable.id, id)));
 
     const [result] = await query.execute();
@@ -67,6 +73,7 @@ export class ReceiptImportRepository {
     const query = database
       .selectDistinct(opts.select)
       .from(receiptImportTable)
+      .leftJoin(supplierTable, eq(supplierTable.id, receiptImportTable.supplier))
       .where(and(eq(receiptImportTable.receiptNumber, receiptNumber)));
 
     const [result] = await query.execute();
@@ -82,6 +89,7 @@ export class ReceiptImportRepository {
     const query = database
       .select(opts.select)
       .from(receiptImportTable)
+      .leftJoin(supplierTable, eq(supplierTable.id, receiptImportTable.supplier))
       .where(and(...filters));
 
     if (opts.orderBy) {

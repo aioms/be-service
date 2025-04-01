@@ -10,10 +10,11 @@ import {
 import { DbTables } from "../../common/config/index.ts";
 import { customNumeric } from "../custom/data-types.ts";
 import { ProductStatus } from "../../modules/product/enums/product.enum.ts";
+import { supplierTable } from "./supplier.schema.ts";
 
 export const productStatus = pgEnum(
   "product_status",
-  Object.values(ProductStatus) as [string, ...string[]]
+  Object.values(ProductStatus) as [string, ...string[]],
 );
 
 export const productTable = pgTable(DbTables.Products, {
@@ -21,13 +22,13 @@ export const productTable = pgTable(DbTables.Products, {
   index: integer("index").unique(),
   productCode: text("product_code").unique(),
   productName: text("product_name").notNull(),
-  sellingPrice: customNumeric("selling_price"),
-  costPrice: customNumeric("cost_price"),
-  discount: customNumeric("discount"),
-  inventory: customNumeric("inventory"),
+  sellingPrice: customNumeric("selling_price").default(0),
+  costPrice: customNumeric("cost_price").default(0),
+  discount: customNumeric("discount").default(0),
+  inventory: customNumeric("inventory").default(0),
+  supplier: uuid("supplier").references(() => supplierTable.id),
   unit: text("unit"),
   category: text("category"),
-  supplier: text("supplier"),
   additionalDescription: text("additional_description"),
   imageUrls: text("image_urls")
     .array()
@@ -42,11 +43,12 @@ export type InsertProduct = typeof productTable.$inferInsert;
 export type SelectProduct = typeof productTable.$inferSelect;
 
 interface ModifiedFields {
-  inventory: SQL;
+  inventory: SQL | number;
 }
 
 type UpdateProductType = Partial<
   Omit<SelectProduct, "id" | "productCode" | "createdAt">
->
+>;
 
-export type UpdateProduct = Omit<UpdateProductType, keyof ModifiedFields> & ModifiedFields;
+export type UpdateProduct = Omit<UpdateProductType, keyof ModifiedFields> &
+  ModifiedFields;

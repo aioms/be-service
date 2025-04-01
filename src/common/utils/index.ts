@@ -94,6 +94,11 @@ export function formatValidation(result, ctx) {
   }
 }
 
-export function isFloat(n){
+export function isFloat(n) {
   return Number(n) === n && n % 1 !== 0;
 }
+
+export function getObjLength(payload: Record<string, unknown>) {
+  return Object.keys(payload).length;
+}
+

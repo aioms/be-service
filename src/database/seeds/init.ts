@@ -16,6 +16,15 @@ async function main() {
 
   const usersData: (typeof userTable.$inferInsert)[] = [
     {
+      code: "SP1",
+      username: "supervisor",
+      password: "$2a$10$yyqYbpadt.JmaPGYY.zgue2OwcCFMXuYk.zrDcegMYRPQjNgOP4A.",
+      salt: "$2a$10$yyqYbpadt.JmaPGYY.zgue",
+      fullname: "Supervisor",
+      status: "active",
+    },
+    {
+      code: "AD1",
       username: "admin",
       password: "$2a$10$yyqYbpadt.JmaPGYY.zgue2OwcCFMXuYk.zrDcegMYRPQjNgOP4A.",
       salt: "$2a$10$yyqYbpadt.JmaPGYY.zgue",

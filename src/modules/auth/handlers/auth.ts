@@ -16,11 +16,11 @@ export default class LoginHandler {
 
   async loginWithPassword(ctx: Context) {
     const body = await parseBodyJson<LoginDto>(ctx);
-    console.log({ body });
 
     const user = await this.authRepository.findUserByUsername(body.username, {
       select: {
         id: userTable.id,
+        fullname: userTable.fullname,
         username: userTable.username,
         password: userTable.password,
         salt: userTable.salt,
@@ -54,6 +54,7 @@ export default class LoginHandler {
     const payload = {
       v: tokenVersion,
       sub: user.id,
+      fullname: user.fullname,
       roles,
     };
 

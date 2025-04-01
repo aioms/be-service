@@ -23,4 +23,3 @@ EXPOSE 2005
 
 # Set the entrypoint for Deno to run the app
 CMD ["run", "--allow-net", "--allow-env", "--allow-read", "--allow-write", "src/main.ts"]
-

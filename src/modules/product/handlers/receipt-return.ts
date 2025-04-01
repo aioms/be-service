@@ -14,6 +14,7 @@ import {
   UpdateReceiptReturn,
 } from "../../../database/schemas/receipt-return.schema.ts";
 import { receiptItemTable } from "../../../database/schemas/receipt-item.schema.ts";
+import { supplierTable } from "../../../database/schemas/supplier.schema.ts";
 
 // DTO
 import {
@@ -26,6 +27,7 @@ import {
   getPaginationMetadata,
   parseBodyJson,
 } from "../../../common/utils/index.ts";
+import { database } from "../../../common/config/database.ts";
 
 @singleton()
 export default class ReceiptReturnHandler {
@@ -33,7 +35,7 @@ export default class ReceiptReturnHandler {
     @inject(ReceiptReturnRepository)
     private receiptRepository: ReceiptReturnRepository,
     @inject(ReceiptItemRepository)
-    private receiptItemRepository: ReceiptItemRepository
+    private receiptItemRepository: ReceiptItemRepository,
   ) {}
 
   async createReceipt(ctx: Context) {
@@ -48,6 +50,7 @@ export default class ReceiptReturnHandler {
       totalAmount,
       totalProduct,
       warehouseLocation,
+      supplier,
       returnDate,
       type,
       reason,
@@ -55,38 +58,44 @@ export default class ReceiptReturnHandler {
       items,
     } = body;
 
-    const receiptNumber = `TH${dayjs().format("YYMMDDHHmm")}`;
-    const receiptReturnData: InsertReceiptReturn = {
-      receiptNumber,
-      name,
-      note,
-      quantity,
-      totalAmount,
-      totalProduct,
-      warehouseLocation,
-      returnDate,
-      type,
-      reason,
-      status,
-      userCreated: userId,
-    };
+    const receiptId = await database.transaction(async (tx) => {
+      const receiptNumber = `TH${dayjs().format("YYMMDDHHmm")}`;
+      const receiptReturnData: InsertReceiptReturn = {
+        receiptNumber,
+        name,
+        note,
+        quantity,
+        totalAmount,
+        totalProduct,
+        warehouseLocation,
+        supplier,
+        returnDate,
+        type,
+        reason,
+        status,
+        userCreated: userId,
+      };
 
-    const { data } = await this.receiptRepository.createReceiptReturn(
-      receiptReturnData
-    );
+      const { data } = await this.receiptRepository.createReceiptReturn(
+        receiptReturnData,
+        tx,
+      );
 
-    if (!data.length) {
-      throw new Error("Can't create receipt");
-    }
+      if (!data.length) {
+        throw new Error("Can't create receipt");
+      }
 
-    const receiptId = data[0].id;
+      const receiptId = data[0].id;
 
-    // Create receipt items
-    const receiptItemsData = items.map((item) => ({
-      ...item,
-      receiptId,
-    }));
-    await this.receiptItemRepository.createReceiptItem(receiptItemsData);
+      // Create receipt items
+      const receiptItemsData = items.map((item) => ({
+        ...item,
+        receiptId,
+      }));
+      await this.receiptItemRepository.createReceiptItem(receiptItemsData, tx);
+
+      return receiptId;
+    });
 
     return ctx.json({
       data: { id: receiptId },
@@ -96,35 +105,68 @@ export default class ReceiptReturnHandler {
   }
 
   async updateReceipt(ctx: Context) {
+    const jwtPayload = ctx.get("jwtPayload");
     const id = ctx.req.param("id");
     const body = await parseBodyJson<UpdateReceiptReturnRequestDto>(ctx);
     const { items, ...newReceiptReturnData } = body;
-
+    const { fullname } = jwtPayload;
     const dataUpdate: UpdateReceiptReturn = {
       ...newReceiptReturnData,
       updatedAt: dayjs().toISOString(),
     };
 
-    const { data } = await this.receiptRepository.updateReceiptReturn({
-      set: dataUpdate,
-      where: [eq(receiptReturnTable.id, id)],
+    await database.transaction(async (tx) => {
+      const { data: receipt } =
+        await this.receiptRepository.findReceiptReturnById(id, {
+          select: {
+            status: receiptReturnTable.status,
+            changeLog: receiptReturnTable.changeLog,
+          },
+        });
+
+      if (!receipt) {
+        throw new Error("Receipt not found");
+      }
+
+      if (newReceiptReturnData.status !== receipt.status) {
+        // Update status change logs
+        const changeLog = receipt.changeLog || [];
+        changeLog.push({
+          user: fullname,
+          oldStatus: receipt.status,
+          newStatus: newReceiptReturnData.status,
+          timestamp: dayjs().toISOString(),
+        });
+
+        dataUpdate.changeLog = changeLog;
+      }
+
+      const { data } = await this.receiptRepository.updateReceiptReturn(
+        {
+          set: dataUpdate,
+          where: [eq(receiptReturnTable.id, id)],
+        },
+        tx,
+      );
+
+      if (!data.length) {
+        throw new Error("Can't update receipt Return");
+      }
+
+      if (items && items.length) {
+        // Delete old receipt items
+        await this.receiptItemRepository.deleteReceiptItemByReceiptId(id, tx);
+
+        // Create receipt items
+        const receiptItemsData = items.map((item) => ({
+          ...item,
+          receiptId: id,
+        }));
+
+        // return ids[]
+        this.receiptItemRepository.createReceiptItem(receiptItemsData, tx);
+      }
     });
-
-    if (!data.length) {
-      throw new Error("Can't update receipt Return");
-    }
-
-    // Delete old receipt items
-    await this.receiptItemRepository.deleteReceiptItemByReceiptId(id);
-
-    // Create receipt items
-    const receiptItemsData = items.map((item) => ({
-      ...item,
-      receiptId: id,
-    }));
-
-    // return ids[]
-    this.receiptItemRepository.createReceiptItem(receiptItemsData);
 
     return ctx.json({
       data: { id },
@@ -136,16 +178,20 @@ export default class ReceiptReturnHandler {
   async deleteReceipt(ctx: Context) {
     const id = ctx.req.param("id");
 
-    const { data } = await this.receiptRepository.deleteReceiptReturn(id);
-    if (!data.length) {
-      throw new Error("Receipt not found");
-    }
+    const result = await database.transaction(async (tx) => {
+      const { data } = await this.receiptRepository.deleteReceiptReturn(id, tx);
+      if (!data.length) {
+        throw new Error("Receipt not found");
+      }
 
-    // Delete receipt items
-    await this.receiptItemRepository.deleteReceiptItemByReceiptId(id);
+      // Delete receipt items
+      await this.receiptItemRepository.deleteReceiptItemByReceiptId(id, tx);
+
+      return data;
+    });
 
     return ctx.json({
-      data,
+      data: result,
       success: true,
       statusCode: 204,
     });
@@ -166,7 +212,12 @@ export default class ReceiptReturnHandler {
           totalProduct: receiptReturnTable.totalProduct,
           totalAmount: receiptReturnTable.totalAmount,
           warehouseLocation: receiptReturnTable.warehouseLocation,
+          supplier: {
+            id: supplierTable.id,
+            name: supplierTable.name,
+          },
           returnDate: receiptReturnTable.returnDate,
+          changeLog: receiptReturnTable.changeLog,
           status: receiptReturnTable.status,
           type: receiptReturnTable.type,
           createdAt: receiptReturnTable.createdAt,
@@ -209,8 +260,8 @@ export default class ReceiptReturnHandler {
       filters.push(
         or(
           ilike(receiptReturnTable.receiptNumber, `%${keyword}%`),
-          ilike(receiptReturnTable.name, `%${keyword}%`)
-        )
+          ilike(receiptReturnTable.name, `%${keyword}%`),
+        ),
       );
     }
 
@@ -241,6 +292,10 @@ export default class ReceiptReturnHandler {
           totalProduct: receiptReturnTable.totalProduct,
           totalAmount: receiptReturnTable.totalAmount,
           warehouseLocation: receiptReturnTable.warehouseLocation,
+          supplier: {
+            id: supplierTable.id,
+            name: supplierTable.name,
+          },
           returnDate: receiptReturnTable.returnDate,
           status: receiptReturnTable.status,
           type: receiptReturnTable.type,
@@ -274,7 +329,7 @@ export default class ReceiptReturnHandler {
             id: receiptReturnTable.id,
             receiptNumber: receiptReturnTable.receiptNumber,
           },
-        }
+        },
       );
 
     if (!receipt) {

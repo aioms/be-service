@@ -14,6 +14,7 @@ import {
   UpdateReceiptImport,
 } from "../../../database/schemas/receipt-import.schema.ts";
 import { receiptItemTable } from "../../../database/schemas/receipt-item.schema.ts";
+import { supplierTable } from "../../../database/schemas/supplier.schema.ts";
 
 // DTO
 import {
@@ -26,6 +27,7 @@ import {
   getPaginationMetadata,
   parseBodyJson,
 } from "../../../common/utils/index.ts";
+import { database } from "../../../common/config/database.ts";
 
 @singleton()
 export default class ReceiptImportHandler {
@@ -33,7 +35,7 @@ export default class ReceiptImportHandler {
     @inject(ReceiptImportRepository)
     private receiptRepository: ReceiptImportRepository,
     @inject(ReceiptItemRepository)
-    private receiptItemRepository: ReceiptItemRepository
+    private receiptItemRepository: ReceiptItemRepository,
   ) {}
 
   async createReceipt(ctx: Context) {
@@ -54,36 +56,41 @@ export default class ReceiptImportHandler {
       items,
     } = body;
 
-    const receiptNumber = `NH${dayjs().format("YYMMDDHHmm")}`;
-    const receiptImportData: InsertReceiptImport = {
-      receiptNumber,
-      note,
-      quantity,
-      totalAmount,
-      totalProduct,
-      supplier,
-      warehouseLocation,
-      paymentDate,
-      expectedImportDate,
-      status,
-      userCreated: userId,
-    };
-    const { data } = await this.receiptRepository.createReceiptImport(
-      receiptImportData
-    );
+    const receiptId = await database.transaction(async (tx) => {
+      const receiptNumber = `NH${dayjs().format("YYMMDDHHmm")}`;
+      const receiptImportData: InsertReceiptImport = {
+        receiptNumber,
+        note,
+        quantity,
+        totalAmount,
+        totalProduct,
+        supplier,
+        warehouseLocation,
+        paymentDate,
+        expectedImportDate,
+        status,
+        userCreated: userId,
+      };
+      const { data } = await this.receiptRepository.createReceiptImport(
+        receiptImportData,
+        tx,
+      );
 
-    if (!data.length) {
-      throw new Error("Can't create receipt");
-    }
+      if (!data.length) {
+        throw new Error("Can't create receipt");
+      }
 
-    const receiptId = data[0].id;
+      const receiptId = data[0].id;
 
-    // Create receipt items
-    const receiptItemsData = items.map((item) => ({
-      ...item,
-      receiptId,
-    }));
-    await this.receiptItemRepository.createReceiptItem(receiptItemsData);
+      // Create receipt items
+      const receiptItemsData = items.map((item) => ({
+        ...item,
+        receiptId,
+      }));
+      await this.receiptItemRepository.createReceiptItem(receiptItemsData, tx);
+
+      return receiptId;
+    });
 
     return ctx.json({
       data: { id: receiptId },
@@ -93,35 +100,69 @@ export default class ReceiptImportHandler {
   }
 
   async updateReceipt(ctx: Context) {
+    const jwtPayload = ctx.get("jwtPayload");
     const id = ctx.req.param("id");
     const body = await parseBodyJson<UpdateReceiptImportRequestDto>(ctx);
     const { items, ...newReceiptImportData } = body;
+    const { fullname } = jwtPayload;
 
     const dataUpdate: UpdateReceiptImport = {
       ...newReceiptImportData,
       updatedAt: dayjs().toISOString(),
     };
 
-    const { data } = await this.receiptRepository.updateReceiptImport({
-      set: dataUpdate,
-      where: [eq(receiptImportTable.id, id)],
+    await database.transaction(async (tx) => {
+      const { data: receipt } =
+        await this.receiptRepository.findReceiptImportById(id, {
+          select: {
+            status: receiptImportTable.status,
+            changeLog: receiptImportTable.changeLog,
+          },
+        });
+
+      if (!receipt) {
+        throw new Error("Receipt not found");
+      }
+
+      if (newReceiptImportData.status !== receipt.status) {
+        // Update status change logs
+        const changeLog = receipt.changeLog || [];
+        changeLog.push({
+          user: fullname,
+          oldStatus: receipt.status,
+          newStatus: newReceiptImportData.status,
+          timestamp: dayjs().toISOString(),
+        });
+
+        dataUpdate.changeLog = changeLog;
+      }
+
+      const { data } = await this.receiptRepository.updateReceiptImport(
+        {
+          set: dataUpdate,
+          where: [eq(receiptImportTable.id, id)],
+        },
+        tx,
+      );
+
+      if (!data.length) {
+        throw new Error("Can't update receipt import");
+      }
+
+      if (items && items.length) {
+        // Delete old receipt items
+        await this.receiptItemRepository.deleteReceiptItemByReceiptId(id, tx);
+
+        // Create receipt items
+        const receiptItemsData = items.map((item) => ({
+          ...item,
+          receiptId: id,
+        }));
+
+        // return ids[]
+        this.receiptItemRepository.createReceiptItem(receiptItemsData, tx);
+      }
     });
-
-    if (!data.length) {
-      throw new Error("Can't update receipt import");
-    }
-
-    // Delete old receipt items
-    await this.receiptItemRepository.deleteReceiptItemByReceiptId(id);
-
-    // Create receipt items
-    const receiptItemsData = items.map((item) => ({
-      ...item,
-      receiptId: id,
-    }));
-
-    // return ids[]
-    this.receiptItemRepository.createReceiptItem(receiptItemsData);
 
     return ctx.json({
       data: { id },
@@ -133,16 +174,20 @@ export default class ReceiptImportHandler {
   async deleteReceipt(ctx: Context) {
     const id = ctx.req.param("id");
 
-    const { data } = await this.receiptRepository.deleteReceiptImport(id);
-    if (!data.length) {
-      throw new Error("Receipt not found");
-    }
+    const result = await database.transaction(async (tx) => {
+      const { data } = await this.receiptRepository.deleteReceiptImport(id, tx);
+      if (!data.length) {
+        throw new Error("Receipt not found");
+      }
 
-    // Delete receipt items
-    await this.receiptItemRepository.deleteReceiptItemByReceiptId(id);
+      // Delete receipt items
+      await this.receiptItemRepository.deleteReceiptItemByReceiptId(id, tx);
+
+      return data;
+    });
 
     return ctx.json({
-      data,
+      data: result,
       success: true,
       statusCode: 204,
     });
@@ -160,10 +205,14 @@ export default class ReceiptImportHandler {
           quantity: receiptImportTable.quantity,
           totalProduct: receiptImportTable.totalProduct,
           totalAmount: receiptImportTable.totalAmount,
-          supplier: receiptImportTable.supplier,
+          supplier: {
+            id: supplierTable.id,
+            name: supplierTable.name,
+          },
           warehouseLocation: receiptImportTable.warehouseLocation,
           paymentDate: receiptImportTable.paymentDate,
           expectedImportDate: receiptImportTable.expectedImportDate,
+          changeLog: receiptImportTable.changeLog,
           status: receiptImportTable.status,
           createdAt: receiptImportTable.createdAt,
         },
@@ -206,7 +255,7 @@ export default class ReceiptImportHandler {
             id: receiptImportTable.id,
             receiptNumber: receiptImportTable.receiptNumber,
           },
-        }
+        },
       );
 
     if (!receipt) {
@@ -245,8 +294,8 @@ export default class ReceiptImportHandler {
       filters.push(
         or(
           ilike(receiptImportTable.receiptNumber, `%${keyword}%`),
-          ilike(receiptImportTable.supplier, `%${keyword}%`)
-        )
+          ilike(receiptImportTable.supplier, `%${keyword}%`),
+        ),
       );
     }
 
@@ -274,7 +323,10 @@ export default class ReceiptImportHandler {
           quantity: receiptImportTable.quantity,
           totalProduct: receiptImportTable.totalProduct,
           totalAmount: receiptImportTable.totalAmount,
-          supplier: receiptImportTable.supplier,
+          supplier: {
+            id: supplierTable.id,
+            name: supplierTable.name,
+          },
           warehouseLocation: receiptImportTable.warehouseLocation,
           paymentDate: receiptImportTable.paymentDate,
           expectedImportDate: receiptImportTable.expectedImportDate,

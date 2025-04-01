@@ -5,6 +5,7 @@ import { SelectUser, userTable } from "../schemas/user.schema.ts";
 import { UserStatus } from "../../modules/auth/enums/user.enum.ts";
 import { SelectUserRole, userRoleTable } from "../schemas/user-role.schema.ts";
 import { roleTable } from "../schemas/role.schema.ts";
+import { PgTx } from "../custom/data-types.ts";
 
 interface OptionBase {
   select: Record<string, any>;
@@ -46,8 +47,10 @@ export class AuthRepository {
   updateTokenVersion(
     id: SelectUser["id"],
     tokenVersion: SelectUser["tokenVersion"],
+    tx?: PgTx,
   ) {
-    return database
+    const db = tx || database;
+    return db
       .update(userTable)
       .set({
         tokenVersion,

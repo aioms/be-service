@@ -1,4 +1,4 @@
-import { SQL, eq, and, desc, sql } from "drizzle-orm";
+import { SQL, eq, and, desc, sql, sum } from "drizzle-orm";
 import { singleton } from "tsyringe";
 import { database } from "../../common/config/database.ts";
 import {
@@ -7,35 +7,40 @@ import {
   UpdateProduct,
   productTable,
 } from "../schemas/product.schema.ts";
-import {
+import { supplierTable } from "../schemas/supplier.schema.ts";
+import type {
   RepositoryOption,
   RepositoryOptionUpdate,
   RepositoryResult,
 } from "../../common/types/index.d.ts";
+import { PgTx } from "../custom/data-types.ts";
 
 @singleton()
 export class ProductRepository {
   /**
    * PRODUCT
    */
-  async createProduct(data: InsertProduct) {
-    const result = await database
+  async createProduct(data: InsertProduct, tx?: PgTx) {
+    const db = tx || database;
+    const result = await db
       .insert(productTable)
       .values(data)
       .returning({ id: productTable.id });
     return { data: result, error: null };
   }
 
-  async createProductOnConflictDoNothing(data: InsertProduct, tx?: any) {
-    return (tx || database)
+  createProductOnConflictDoNothing(data: InsertProduct[], tx?: PgTx) {
+    const db = tx || database;
+    return db
       .insert(productTable)
       .values(data)
-      .onConflictDoNothing({ target: productTable.productCode })
-      // .returning({ id: productTable.id });
+      .onConflictDoNothing({ target: productTable.productCode });
+    // .returning({ id: productTable.id });
   }
 
-  async createProductOnConflictDoUpdate(data: InsertProduct, tx?: any) {
-    return (tx || database)
+  createProductOnConflictDoUpdate(data: InsertProduct[], tx?: PgTx) {
+    const db = tx || database;
+    return db
       .insert(productTable)
       .values(data)
       .onConflictDoUpdate({
@@ -55,25 +60,29 @@ export class ProductRepository {
           warehouseLocation: sql`EXCLUDED.warehouse_location`,
           status: sql`EXCLUDED.status`,
         },
-      })
-      // .returning({ id: productTable.id });
+      });
+    // .returning({ id: productTable.id });
   }
 
-  async findProductById(
-    id: SelectProduct["id"],
-    opts: Pick<RepositoryOption, "select">
+  async findProductByIdentity(
+    identity: string,
+    opts: Pick<RepositoryOption, "select">,
   ): Promise<RepositoryResult> {
+    const isUUID = identity.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
+    const column = isUUID ? productTable.id : productTable.productCode;
+
     const query = database
       .selectDistinct(opts.select)
       .from(productTable)
-      .where(and(eq(productTable.id, id)));
+      .leftJoin(supplierTable, eq(supplierTable.id, productTable.supplier))
+      .where(and(eq(column, identity)));
 
     const [result] = await query.execute();
     return { data: result, error: null };
   }
 
   async findProductsByCondition(
-    opts: RepositoryOption
+    opts: RepositoryOption,
   ): Promise<RepositoryResult> {
     let count: number | null = null;
     const filters: SQL[] = [...opts.where];
@@ -81,6 +90,7 @@ export class ProductRepository {
     const query = database
       .select(opts.select)
       .from(productTable)
+      .leftJoin(supplierTable, eq(supplierTable.id, productTable.supplier))
       .where(and(...filters));
 
     if (opts.orderBy) {
@@ -120,10 +130,14 @@ export class ProductRepository {
     return { data: lastIndexProduct[0].index, error: null };
   }
 
-  async updateProduct(opts: RepositoryOptionUpdate<Partial<UpdateProduct>>) {
+  async updateProduct(
+    opts: RepositoryOptionUpdate<Partial<UpdateProduct>>,
+    tx?: PgTx,
+  ) {
+    const db = tx || database;
     const filters: SQL[] = [...opts.where];
 
-    const result = await database
+    const result = await db
       .update(productTable)
       .set(opts.set)
       .where(and(...filters))
@@ -132,8 +146,9 @@ export class ProductRepository {
     return { data: result, error: null };
   }
 
-  async deleteProduct(id: SelectProduct["id"]) {
-    const result = await database
+  async deleteProduct(id: SelectProduct["id"], tx?: PgTx) {
+    const db = tx || database;
+    const result = await db
       .delete(productTable)
       .where(eq(productTable.id, id))
       .returning({ id: productTable.id });
@@ -175,40 +190,6 @@ export class ProductRepository {
     return { data: suppliers, error: null, count };
   }
 
-  async findSuppliersByCondition(opts: RepositoryOption) {
-    let count: number | null = null;
-    const filters: SQL[] = [...opts.where];
-
-    const query = database
-      .selectDistinctOn([productTable.supplier], {
-        supplier: productTable.supplier,
-      })
-      .from(productTable)
-      .where(and(...filters))
-      .orderBy(productTable.supplier);
-
-    if (opts.limit) {
-      query.limit(opts.limit);
-    }
-
-    if (opts.offset) {
-      query.offset(opts.offset);
-    }
-
-    if (opts.isCount) {
-      count = await database.$count(productTable, and(...filters));
-    }
-
-    const results = await query.execute();
-
-    if (!results.length) {
-      return { data: [], error: null, count };
-    }
-
-    const suppliers = results.map((r) => r.supplier);
-    return { data: suppliers, error: null, count };
-  }
-
   async findUnitByCondition(opts: RepositoryOption) {
     const filters: SQL[] = [...opts.where];
 
@@ -227,5 +208,23 @@ export class ProductRepository {
     }
 
     return { data: results, error: null };
+  }
+
+  async getTotalProducts() {
+    const count = await database.$count(productTable);
+    return count;
+  }
+
+  async getTotalInventory() {
+    const count = await database
+      .select({ value: sum(productTable.inventory) })
+      .from(productTable)
+      .execute();
+
+    if (!count.length) {
+      return 0;
+    }
+
+    return +(count[0].value || 0);
   }
 }

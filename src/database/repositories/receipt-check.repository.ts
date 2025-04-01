@@ -12,26 +12,31 @@ import {
   SelectReceiptCheck,
   UpdateReceiptCheck,
 } from "../schemas/receipt-check.schema.ts";
+import { supplierTable } from "../schemas/supplier.schema.ts";
 import { userTable } from "../schemas/user.schema.ts";
 import { receiptItemTable } from "../schemas/receipt-item.schema.ts";
+
+import { PgTx } from "../custom/data-types.ts";
 
 @singleton()
 export class ReceiptCheckRepository {
   /**
    * RECEIPT CHECK
    */
-  async createReceiptCheck(data: InsertReceiptCheck) {
-    const result = await database
+  async createReceiptCheck(data: InsertReceiptCheck, tx?: PgTx) {
+    const db = tx || database;
+    const result = await db
       .insert(receiptCheckTable)
       .values(data)
       .returning({ id: receiptCheckTable.id });
     return { data: result, error: null };
   }
 
-  async updateReceiptCheck(opts: RepositoryOptionUpdate<UpdateReceiptCheck>) {
+  async updateReceiptCheck(opts: RepositoryOptionUpdate<UpdateReceiptCheck>, tx?: PgTx) {
+    const db = tx || database;
     const filters: SQL[] = [...opts.where];
 
-    const result = await database
+    const result = await db
       .update(receiptCheckTable)
       .set(opts.set)
       .where(and(...filters))
@@ -40,8 +45,9 @@ export class ReceiptCheckRepository {
     return { data: result, error: null };
   }
 
-  async deleteReceiptCheck(id: SelectReceiptCheck["id"]) {
-    const result = await database
+  async deleteReceiptCheck(id: SelectReceiptCheck["id"], tx?: PgTx) {
+    const db = tx || database;
+    const result = await db
       .delete(receiptCheckTable)
       .where(eq(receiptCheckTable.id, id))
       .returning({ id: receiptCheckTable.id });
@@ -56,6 +62,7 @@ export class ReceiptCheckRepository {
     const query = database
       .selectDistinct(opts.select)
       .from(receiptCheckTable)
+      .leftJoin(supplierTable, eq(supplierTable.id, receiptCheckTable.supplier))
       .where(and(eq(receiptCheckTable.id, id)));
 
     const [result] = await query.execute();
@@ -69,6 +76,7 @@ export class ReceiptCheckRepository {
     const query = database
       .selectDistinct(opts.select)
       .from(receiptCheckTable)
+      .leftJoin(supplierTable, eq(supplierTable.id, receiptCheckTable.supplier))
       .where(and(eq(receiptCheckTable.receiptNumber, receiptNumber)));
 
     const [result] = await query.execute();
@@ -84,12 +92,13 @@ export class ReceiptCheckRepository {
     const query = database
       .select(opts.select)
       .from(receiptCheckTable)
+      .leftJoin(supplierTable, eq(supplierTable.id, receiptCheckTable.supplier))
       .leftJoin(userTable, eq(userTable.id, receiptCheckTable.checker))
       .leftJoin(
         receiptItemTable,
         eq(receiptCheckTable.id, receiptItemTable.receiptId),
       )
-      .groupBy(receiptCheckTable.id, userTable.id)
+      .groupBy(receiptCheckTable.id, userTable.id, supplierTable.id)
       .where(and(...filters));
 
     if (opts.orderBy) {

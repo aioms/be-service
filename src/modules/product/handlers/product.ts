@@ -1,9 +1,10 @@
 import { singleton, inject } from "tsyringe";
 import { Context } from "hono";
-import { or, ilike, eq, desc } from "drizzle-orm";
+import { or, ilike, eq, desc, inArray, lte, gte } from "drizzle-orm";
 import dayjs from "dayjs";
 import * as XLSX from "xlsx";
 
+import { SupplierRepository } from "../../../database/repositories/supplier.repository.ts";
 import { ProductRepository } from "../../../database/repositories/product.repository.ts";
 import { ProductStatus } from "../enums/product.enum.ts";
 import {
@@ -11,20 +12,27 @@ import {
   type InsertProduct,
   type UpdateProduct,
 } from "../../../database/schemas/product.schema.ts";
+import { supplierTable } from "../../../database/schemas/supplier.schema.ts";
+
 import {
   getPagination,
   getPaginationMetadata,
-  isFloat,
   parseBodyJson,
 } from "../../../common/utils/index.ts";
 import { generateProductCode } from "../utils/product.util.ts";
-import { ResponseType } from "../../../common/types/index.d.ts";
+import type { ResponseType } from "../../../common/types/index.d.ts";
 import { database } from "../../../common/config/database.ts";
+import { SupplierStatus } from "../../supplier/enums/supplier.enum.ts";
+import { ReceiptItemRepository } from "../../../database/repositories/receipt-item.repository.ts";
+import { receiptItemTable } from "../../../database/schemas/receipt-item.schema.ts";
 
 @singleton()
 export default class ProductHandler {
   constructor(
-    @inject(ProductRepository) private productRepository: ProductRepository
+    @inject(ProductRepository) private productRepository: ProductRepository,
+    @inject(SupplierRepository) private supplierRepository: SupplierRepository,
+    @inject(ReceiptItemRepository)
+    private receiptItemRepository: ReceiptItemRepository,
   ) {}
 
   async createProduct(ctx: Context) {
@@ -108,7 +116,7 @@ export default class ProductHandler {
       {
         set: dataUpdate,
         where: [eq(productTable.id, id)],
-      }
+      },
     );
 
     if (!productUpdated.length) {
@@ -140,9 +148,8 @@ export default class ProductHandler {
   async getProductById(ctx: Context) {
     const productId = ctx.req.param("id");
 
-    const { data: product } = await this.productRepository.findProductById(
-      productId,
-      {
+    const { data: product } =
+      await this.productRepository.findProductByIdentity(productId, {
         select: {
           id: productTable.id,
           category: productTable.category,
@@ -152,7 +159,10 @@ export default class ProductHandler {
           sellingPrice: productTable.sellingPrice,
           costPrice: productTable.costPrice,
           inventory: productTable.inventory,
-          supplier: productTable.supplier,
+          supplier: {
+            id: supplierTable.id,
+            name: supplierTable.name,
+          },
           additionalDescription: productTable.additionalDescription,
           imageUrls: productTable.imageUrls,
           warehouseLocation: productTable.warehouseLocation,
@@ -160,8 +170,7 @@ export default class ProductHandler {
           createdAt: productTable.createdAt,
           updatedAt: productTable.updatedAt,
         },
-      }
-    );
+      });
     if (!product) {
       throw new Error("product not found");
     }
@@ -175,16 +184,38 @@ export default class ProductHandler {
 
   async getProductsByFilter(ctx: Context) {
     const query = ctx.req.query();
-    const { keyword, status } = query;
+    const categories = ctx.req.queries("categories");
+    const suppliers = ctx.req.queries("suppliers");
+    const { keyword, status, maxPrice, minPrice, maxInventory } = query;
     const filters: any = [];
 
     if (keyword) {
       filters.push(
         or(
           ilike(productTable.productCode, `%${keyword}%`),
-          ilike(productTable.productName, `%${keyword}%`)
-        )
+          ilike(productTable.productName, `%${keyword}%`),
+        ),
       );
+    }
+
+    if (categories && categories.length) {
+      filters.push(inArray(productTable.category, categories));
+    }
+
+    if (suppliers && suppliers.length) {
+      filters.push(inArray(productTable.supplier, suppliers));
+    }
+
+    if (maxPrice) {
+      filters.push(lte(productTable.sellingPrice, +maxPrice));
+    }
+
+    if (minPrice) {
+      filters.push(gte(productTable.sellingPrice, +minPrice));
+    }
+
+    if (maxInventory) {
+      filters.push(lte(productTable.inventory, +maxInventory));
     }
 
     if (status) {
@@ -207,7 +238,10 @@ export default class ProductHandler {
           sellingPrice: productTable.sellingPrice,
           costPrice: productTable.costPrice,
           inventory: productTable.inventory,
-          supplier: productTable.supplier,
+          supplier: {
+            id: supplierTable.id,
+            name: supplierTable.name,
+          },
           additionalDescription: productTable.additionalDescription,
           imageUrls: productTable.imageUrls,
           warehouseLocation: productTable.warehouseLocation,
@@ -226,6 +260,55 @@ export default class ProductHandler {
 
     return ctx.json({
       data: products,
+      metadata,
+      success: true,
+      statusCode: 200,
+    });
+  }
+
+  async getTotalProductAndInventory(ctx: Context) {
+    const [totalProduct, totalInventory] = await Promise.all([
+      this.productRepository.getTotalProducts(),
+      this.productRepository.getTotalInventory(),
+    ]);
+
+    return ctx.json({
+      data: {
+        totalProduct,
+        totalInventory,
+      },
+      success: true,
+      statusCode: 200,
+    });
+  }
+
+  async getReceiptHistoryOfProduct(ctx: Context) {
+    const query = ctx.req.query();
+    const { type, productId, page, limit } = query;
+    const filters: any = [eq(receiptItemTable.productId, productId)];
+
+    const {
+      page: currentPage,
+      limit: take,
+      offset,
+    } = getPagination({
+      page: +(page || 1),
+      limit: +(limit || 10),
+    });
+
+    const { data, count } =
+      await this.receiptItemRepository.findReceiptItemsByProduct(type, {
+        select: {},
+        where: filters,
+        limit: take,
+        offset,
+        isCount: true,
+      });
+
+    const metadata = getPaginationMetadata(currentPage, take, offset, count!);
+
+    return ctx.json({
+      data,
       metadata,
       success: true,
       statusCode: 200,
@@ -252,43 +335,6 @@ export default class ProductHandler {
 
     const { data, count } =
       await this.productRepository.findCategoriesByCondition({
-        select: {},
-        where: filters,
-        limit: take,
-        offset,
-        isCount: true,
-      });
-
-    const metadata = getPaginationMetadata(currentPage, take, offset, count!);
-
-    return ctx.json({
-      data,
-      metadata,
-      success: true,
-      statusCode: 200,
-    });
-  }
-
-  async getSuppliers(ctx: Context) {
-    const query = ctx.req.query();
-    const { keyword, page, limit } = query;
-    const filters: any = [];
-
-    if (keyword) {
-      filters.push(ilike(productTable.supplier, `%${keyword}%`));
-    }
-
-    const {
-      page: currentPage,
-      limit: take,
-      offset,
-    } = getPagination({
-      page: +(page || 1),
-      limit: +(limit || 10),
-    });
-
-    const { data, count } =
-      await this.productRepository.findSuppliersByCondition({
         select: {},
         where: filters,
         limit: take,
@@ -361,7 +407,7 @@ export default class ProductHandler {
 
             await database.transaction(async (tx) => {
               for (const batch of batches) {
-                const products = batch.map((row) => {
+                const productsAsync = batch.map(async (row) => {
                   const code = row["Mã hàng"];
                   const [, index] = code.split("NK");
 
@@ -375,8 +421,35 @@ export default class ProductHandler {
 
                   const count = parseInt(index);
                   const productCode = generateProductCode(count - 1);
+                  const supplierName = row["Nhà Cung Cấp"];
+                  let supplierId = "";
 
-                  const product = {
+                  if (supplierName) {
+                    const supplier =
+                      await this.supplierRepository.findSupplierByName(
+                        supplierName.trim(),
+                        {
+                          select: {
+                            id: supplierTable.id,
+                            name: supplierTable.name,
+                          },
+                        },
+                      );
+
+                    if (supplier.data?.id) {
+                      supplierId = supplier.data.id;
+                    } else {
+                      const { data: newSupplier } =
+                        await this.supplierRepository.createSupplier({
+                          name: supplierName.trim(),
+                          status: SupplierStatus.COLLABORATING,
+                        });
+
+                      supplierId = newSupplier[0].id;
+                    }
+                  }
+
+                  const product: Record<string, string | number> = {
                     index: count,
                     productCode,
                     productName: row["Tên hàng"],
@@ -385,27 +458,33 @@ export default class ProductHandler {
                     inventory: row["Tồn kho"],
                     unit: row["ĐVT"],
                     category: row["Nhóm hàng(3 Cấp)"],
-                    supplier: row["Nhà Cung Cấp"],
                     additionalDescription: row["Mô tả thêm"],
                     imageUrls: row["Hình ảnh (url1,url2...)"]?.split(",") ?? [],
                     warehouseLocation: row["Vị trí"],
                     status: ProductStatus.ACTIVE,
                   };
 
+                  if (supplierId) {
+                    product.supplier = supplierId;
+                  }
+
                   return product;
                 });
+                const products = await Promise.all(productsAsync);
 
                 const validProducts = products.filter(
-                  (product) => product.success !== false
+                  (product) => product.success !== false,
                 );
 
                 if (query.type === "2") {
                   await this.productRepository.createProductOnConflictDoUpdate(
-                    validProducts, tx,
+                    validProducts,
+                    tx,
                   );
                 } else {
                   await this.productRepository.createProductOnConflictDoNothing(
-                    validProducts, tx,
+                    validProducts,
+                    tx,
                   );
                 }
               }
@@ -431,7 +510,7 @@ export default class ProductHandler {
     } catch (error) {
       return ctx.json({
         success: false,
-        message: error.message,
+        message: (error as Error).message,
         statusCode: 500,
         error,
       });
@@ -449,7 +528,10 @@ export default class ProductHandler {
         sellingPrice: productTable.sellingPrice,
         costPrice: productTable.costPrice,
         inventory: productTable.inventory,
-        supplier: productTable.supplier,
+        supplier: {
+          id: supplierTable.id,
+          name: supplierTable.name,
+        },
         additionalDescription: productTable.additionalDescription,
         imageUrls: productTable.imageUrls,
         warehouseLocation: productTable.warehouseLocation,
