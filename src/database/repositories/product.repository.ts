@@ -1,6 +1,7 @@
 import { SQL, eq, and, desc, sql, sum } from "drizzle-orm";
 import { singleton } from "tsyringe";
 import { database } from "../../common/config/database.ts";
+
 import {
   InsertProduct,
   SelectProduct,
@@ -8,12 +9,15 @@ import {
   productTable,
 } from "../schemas/product.schema.ts";
 import { supplierTable } from "../schemas/supplier.schema.ts";
+import { productInventoryLogTable } from "../schemas/product-inventory-log.schema.ts";
+
 import type {
   RepositoryOption,
   RepositoryOptionUpdate,
   RepositoryResult,
 } from "../../common/types/index.d.ts";
 import { PgTx } from "../custom/data-types.ts";
+import { InventoryChangeType } from "../enums/inventory.enum.ts";
 
 @singleton()
 export class ProductRepository {
@@ -66,9 +70,11 @@ export class ProductRepository {
 
   async findProductByIdentity(
     identity: string,
-    opts: Pick<RepositoryOption, "select">,
+    opts: Pick<RepositoryOption, "select">
   ): Promise<RepositoryResult> {
-    const isUUID = identity.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
+    const isUUID = identity.match(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    );
     const column = isUUID ? productTable.id : productTable.productCode;
 
     const query = database
@@ -82,7 +88,7 @@ export class ProductRepository {
   }
 
   async findProductsByCondition(
-    opts: RepositoryOption,
+    opts: RepositoryOption
   ): Promise<RepositoryResult> {
     let count: number | null = null;
     const filters: SQL[] = [...opts.where];
@@ -132,7 +138,7 @@ export class ProductRepository {
 
   async updateProduct(
     opts: RepositoryOptionUpdate<Partial<UpdateProduct>>,
-    tx?: PgTx,
+    tx?: PgTx
   ) {
     const db = tx || database;
     const filters: SQL[] = [...opts.where];
@@ -177,7 +183,13 @@ export class ProductRepository {
     }
 
     if (opts.isCount) {
-      count = await database.$count(productTable, and(...filters));
+      count = await database
+        .select({
+          count: sql<number>`COUNT(DISTINCT ${productTable.category})`,
+        })
+        .from(productTable)
+        .where(filters.length ? and(...filters) : undefined)
+        .then((result) => Number(result[0].count));
     }
 
     const results = await query.execute();
@@ -226,5 +238,176 @@ export class ProductRepository {
     }
 
     return +(count[0].value || 0);
+  }
+
+  async getTotalValueInventory() {
+    const count = await database
+      .select({
+        value: sql<number>`coalesce(sum(${productTable.inventory} * ${productTable.costPrice}), 0)`,
+      })
+      .from(productTable)
+      .execute();
+
+    if (!count.length) {
+      return 0;
+    }
+
+    return +(count[0].value || 0);
+  }
+
+  async getTotalProductInventoryByCategory(category: string) {
+    const count = await database
+      .select({ value: sum(productTable.inventory) })
+      .from(productTable)
+      .where(eq(productTable.category, category))
+      .execute();
+
+    if (!count.length) {
+      return 0;
+    }
+
+    return +(count[0].value || 0);
+  }
+
+  async getInventoryByCategory(opts: {
+    category?: string;
+    page?: number;
+    limit?: number;
+  }): Promise<{
+    data: { x: string; y: number }[];
+    total: number;
+  }> {
+    const page = opts.page || 1;
+    const limit = opts.limit || 10;
+    const offset = (page - 1) * limit;
+    const filters: SQL[] = [];
+
+    // Add category filter if provided
+    if (opts.category) {
+      filters.push(eq(productTable.category, opts.category));
+    }
+
+    // Get total count for pagination
+    const totalCount = await database.$count(
+      productTable,
+      filters.length ? and(...filters) : undefined
+    );
+
+    // Get product inventory data with pagination
+    const query = database
+      .select({
+        productName: productTable.productName,
+        inventory: productTable.inventory,
+      })
+      .from(productTable)
+      .where(filters.length ? and(...filters) : undefined)
+      .orderBy(desc(productTable.inventory))
+      .limit(limit)
+      .offset(offset);
+
+    const results = await query.execute();
+
+    // Transform data into chart format
+    const dataset = results.map((item) => ({
+      x: item.productName,
+      y: Number(item.inventory),
+    }));
+
+    return {
+      data: dataset,
+      total: totalCount,
+    };
+  }
+
+  async getInventoryTurnoverDataset(opts: {
+    startDate: string;
+    endDate: string;
+    page?: number;
+    limit?: number;
+  }): Promise<{
+    data: { x: string; y: number }[];
+    total: number;
+  }> {
+    const page = opts.page || 1;
+    const limit = opts.limit || 10;
+    const offset = (page - 1) * limit;
+
+    // Get total count for pagination
+    const totalCount = await database.$count(productTable);
+
+    // Calculate inventory turnover for each product
+    const query = database
+      .select({
+        productName: productTable.productName,
+        // Get beginning inventory (inventory at start date)
+        beginningInventory: sql<number>`
+          COALESCE(
+            (
+              SELECT current_inventory
+              FROM ${productInventoryLogTable}
+              WHERE product_id = ${productTable.id}
+              AND created_at < ${opts.startDate}::timestamp
+              ORDER BY created_at DESC
+              LIMIT 1
+            ),
+            ${productTable.inventory}
+          )
+        `,
+        // Get ending inventory (inventory at end date)
+        endingInventory: sql<number>`
+          COALESCE(
+            (
+              SELECT current_inventory
+              FROM ${productInventoryLogTable}
+              WHERE product_id = ${productTable.id}
+              AND created_at <= ${opts.endDate}::timestamp
+              ORDER BY created_at DESC
+              LIMIT 1
+            ),
+            ${productTable.inventory}
+          )
+        `,
+        // Get total goods sold/used in period (sum of negative inventory changes)
+        totalSold: sql<number>`
+          COALESCE(
+            (
+              SELECT SUM(ABS(inventory_change))
+              FROM ${productInventoryLogTable}
+              WHERE product_id = ${productTable.id}
+              AND created_at BETWEEN ${opts.startDate}::timestamp AND ${opts.endDate}::timestamp
+              AND change_type IN (${InventoryChangeType.SALE})
+            ),
+            0
+          )
+        `,
+      })
+      .from(productTable)
+      .orderBy(productTable.productName)
+      .limit(limit)
+      .offset(offset);
+
+    const results = await query.execute();
+
+    // Transform data into chart format with inventory turnover calculation
+    const dataset = results.map((item) => {
+      // Calculate average inventory
+      const averageInventory =
+        (Number(item.beginningInventory) + Number(item.endingInventory)) / 2;
+
+      // Calculate inventory turnover ratio
+      // If average inventory is 0, return 0 to avoid division by zero
+      const turnoverRatio =
+        averageInventory > 0 ? Number(item.totalSold) / averageInventory : 0;
+
+      return {
+        x: item.productName,
+        y: Number(turnoverRatio.toFixed(2)), // Round to 2 decimal places
+      };
+    });
+
+    return {
+      data: dataset,
+      total: totalCount,
+    };
   }
 }

@@ -17,6 +17,8 @@ import { receiptImportTable } from "../schemas/receipt-import.schema.ts";
 import { receiptReturnTable } from "../schemas/receipt-return.schema.ts";
 import { receiptCheckTable } from "../schemas/receipt-check.schema.ts";
 
+import { ReceiptImportStatus } from "../../modules/product/enums/receipt.enum.ts";
+
 @singleton()
 export class ReceiptItemRepository {
   /**
@@ -33,7 +35,7 @@ export class ReceiptItemRepository {
 
   async updateReceiptItem(
     opts: RepositoryOptionUpdate<Partial<UpdateReceiptItem>>,
-    tx?: PgTx,
+    tx?: PgTx
   ) {
     const db = tx || database;
     const filters: SQL[] = [...opts.where];
@@ -59,7 +61,7 @@ export class ReceiptItemRepository {
 
   async deleteReceiptItemByReceiptId(
     receiptId: SelectReceiptItem["receiptId"],
-    tx?: PgTx,
+    tx?: PgTx
   ) {
     const db = tx || database;
     const result = await db
@@ -71,7 +73,7 @@ export class ReceiptItemRepository {
   }
 
   async findReceiptItemsByCondition(
-    opts: RepositoryOption,
+    opts: RepositoryOption
   ): Promise<RepositoryResult> {
     let count: number | null = null;
     const filters: SQL[] = [...opts.where];
@@ -106,7 +108,7 @@ export class ReceiptItemRepository {
 
   async findReceiptItemsByProduct(
     type: string,
-    opts: RepositoryOption,
+    opts: RepositoryOption
   ): Promise<RepositoryResult> {
     let count: number | null = null;
     const filters: SQL[] = [...opts.where];
@@ -119,21 +121,21 @@ export class ReceiptItemRepository {
         joinedTable = receiptImportTable;
         query.innerJoin(
           receiptImportTable,
-          eq(receiptItemTable.receiptId, receiptImportTable.id),
+          eq(receiptItemTable.receiptId, receiptImportTable.id)
         );
         break;
       case "return":
         joinedTable = receiptReturnTable;
         query.innerJoin(
           receiptReturnTable,
-          eq(receiptItemTable.receiptId, receiptReturnTable.id),
+          eq(receiptItemTable.receiptId, receiptReturnTable.id)
         );
         break;
       case "check":
         joinedTable = receiptCheckTable;
         query.innerJoin(
           receiptCheckTable,
-          eq(receiptItemTable.receiptId, receiptCheckTable.id),
+          eq(receiptItemTable.receiptId, receiptCheckTable.id)
         );
         break;
       default:
@@ -169,5 +171,58 @@ export class ReceiptItemRepository {
 
     const results = await query.execute();
     return { data: results, error: null, count };
+  }
+
+  async getImportProductsByDateRange(
+    startDate: string,
+    endDate: string,
+    productId?: string,
+  ): Promise<{ x: string; y: number }[]> {
+    // Ensure dates are in correct format
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+
+    const filters = [
+      sql`${receiptItemTable.createdAt}::date >= ${start.toISOString()}::date`,
+      sql`${receiptItemTable.createdAt}::date <= ${end.toISOString()}::date`,
+      eq(receiptImportTable.status, ReceiptImportStatus.COMPLETED),
+    ];
+
+    if (productId) {
+      filters.push(eq(receiptItemTable.productId, productId));
+    }
+
+    // Get daily total imported products
+    const results = await database
+      .select({
+        date: sql<string>`DATE(${receiptItemTable.createdAt})`,
+        totalQuantity: sql<number>`COALESCE(SUM(${receiptItemTable.quantity}), 0)`,
+      })
+      .from(receiptItemTable)
+      .innerJoin(
+        receiptImportTable,
+        eq(receiptItemTable.receiptId, receiptImportTable.id)
+      )
+      .where(and(...filters))
+      .groupBy(sql`DATE(${receiptItemTable.createdAt})`)
+      .orderBy(sql`DATE(${receiptItemTable.createdAt})`);
+
+    // Generate complete date range with zero values for missing dates
+    const dataset: { x: string; y: number }[] = [];
+    const currentDate = new Date(start);
+
+    while (currentDate <= end) {
+      const dateStr = currentDate.toISOString().split("T")[0];
+      const dayData = results.find((r) => r.date === dateStr);
+
+      dataset.push({
+        x: dateStr,
+        y: dayData ? Number(dayData.totalQuantity) : 0,
+      });
+
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+
+    return dataset;
   }
 }

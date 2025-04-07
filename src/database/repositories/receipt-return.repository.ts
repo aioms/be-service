@@ -1,4 +1,4 @@
-import { SQL, eq, and, desc } from "drizzle-orm";
+import { SQL, eq, and, desc, sql } from "drizzle-orm";
 import { singleton } from "tsyringe";
 import { database } from "../../common/config/database.ts";
 import {
@@ -14,6 +14,7 @@ import {
 } from "../schemas/receipt-return.schema.ts";
 import { supplierTable } from "../schemas/supplier.schema.ts";
 import { PgTx } from "../custom/data-types.ts";
+import { ReceiptReturnStatus } from "../../modules/product/enums/receipt.enum.ts";
 
 @singleton()
 export class ReceiptReturnRepository {
@@ -29,7 +30,10 @@ export class ReceiptReturnRepository {
     return { data: result, error: null };
   }
 
-  async updateReceiptReturn(opts: RepositoryOptionUpdate<UpdateReceiptReturn>, tx?: PgTx) {
+  async updateReceiptReturn(
+    opts: RepositoryOptionUpdate<UpdateReceiptReturn>,
+    tx?: PgTx
+  ) {
     const db = tx || database;
     const filters: SQL[] = [...opts.where];
 
@@ -59,7 +63,10 @@ export class ReceiptReturnRepository {
     const query = database
       .selectDistinct(opts.select)
       .from(receiptReturnTable)
-      .leftJoin(supplierTable, eq(supplierTable.id, receiptReturnTable.supplier))
+      .leftJoin(
+        supplierTable,
+        eq(supplierTable.id, receiptReturnTable.supplier)
+      )
       .where(and(eq(receiptReturnTable.id, id)));
 
     const [result] = await query.execute();
@@ -75,7 +82,10 @@ export class ReceiptReturnRepository {
     const query = database
       .select(opts.select)
       .from(receiptReturnTable)
-      .leftJoin(supplierTable, eq(supplierTable.id, receiptReturnTable.supplier))
+      .leftJoin(
+        supplierTable,
+        eq(supplierTable.id, receiptReturnTable.supplier)
+      )
       .where(and(...filters));
 
     if (opts.orderBy) {
@@ -107,10 +117,73 @@ export class ReceiptReturnRepository {
     const query = database
       .selectDistinct(opts.select)
       .from(receiptReturnTable)
-      .leftJoin(supplierTable, eq(supplierTable.id, receiptReturnTable.supplier))
+      .leftJoin(
+        supplierTable,
+        eq(supplierTable.id, receiptReturnTable.supplier)
+      )
       .where(and(eq(receiptReturnTable.receiptNumber, receiptNumber)));
 
     const [result] = await query.execute();
     return { data: result, error: null };
+  }
+
+  async getTotalOfReturn() {
+    const query = database
+      .select({
+        total: sql<number>`coalesce(sum(${receiptReturnTable.totalProduct}), 0)`,
+      })
+      .from(receiptReturnTable)
+      .where(eq(receiptReturnTable.status, ReceiptReturnStatus.COMPLETED));
+
+    const [result] = await query.execute();
+    return +(result?.total ?? 0);
+  }
+
+  async getTotalReturnsByDateRange(
+    startDate: string,
+    endDate: string
+  ): Promise<{ x: string; y: number }[]> {
+    // Ensure dates are in correct format
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+
+    // Get all returns within date range
+    const results = await database
+      .select({
+        date: sql<string>`DATE(${receiptReturnTable.createdAt})`,
+        total: sql<number>`COALESCE(SUM(${receiptReturnTable.totalProduct}), 0)`,
+      })
+      .from(receiptReturnTable)
+      .where(
+        and(
+          sql`${
+            receiptReturnTable.createdAt
+          }::date >= ${start.toISOString()}::date`,
+          sql`${
+            receiptReturnTable.createdAt
+          }::date <= ${end.toISOString()}::date`,
+          eq(receiptReturnTable.status, ReceiptReturnStatus.COMPLETED)
+        )
+      )
+      .groupBy(sql`DATE(${receiptReturnTable.createdAt})`)
+      .orderBy(sql`DATE(${receiptReturnTable.createdAt})`);
+
+    // Generate complete date range with zero values for missing dates
+    const dataset: { x: string; y: number }[] = [];
+    const currentDate = new Date(start);
+
+    while (currentDate <= end) {
+      const dateStr = currentDate.toISOString().split("T")[0];
+      const dayData = results.find((r) => r.date === dateStr);
+
+      dataset.push({
+        x: dateStr,
+        y: dayData ? Number(dayData.total) : 0,
+      });
+
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+
+    return dataset;
   }
 }

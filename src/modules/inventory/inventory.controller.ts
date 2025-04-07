@@ -21,6 +21,38 @@ export default class InventoryController {
       this.inventoryHandler.updateInventoryOfReceiptImport(c),
     );
 
+    route.get("/inventory/total", authenticate, (c) =>
+      this.inventoryHandler.getTotalInventory(c),
+    );
+
+    route.get("/inventory/value", authenticate, (c) =>
+      this.inventoryHandler.getTotalValueInventory(c),
+    );
+
+    route.get("/inventory/import-new", authenticate, (c) =>
+      this.inventoryHandler.getTotalOfImportNew(c),
+    );
+
+    route.get("/inventory/return", authenticate, (c) =>
+      this.inventoryHandler.getTotalOfReturn(c),
+    );
+
+    route.get("/inventory/import-products", authenticate, (c) =>
+      this.inventoryHandler.getImportProductsDataset(c),
+    );
+
+    route.get("/inventory/category/total", authenticate, (c) =>
+      this.inventoryHandler.getTotalProductInventoryByCategory(c),
+    );
+
+    route.get("/inventory/category", authenticate, (c) =>
+      this.inventoryHandler.getProductInventoryByCategory(c),
+    );
+
+    route.get("/inventory/turnover", authenticate, (c) =>
+      this.inventoryHandler.getProductInventoryTurnOver(c),
+    );
+
     app.route(this.path, route);
   }
 }
