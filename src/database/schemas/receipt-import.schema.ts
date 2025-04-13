@@ -34,7 +34,7 @@ export const receiptImportTable = pgTable(DbTables.ReceiptImports, {
   supplier: uuid("supplier")
     .notNull()
     .references(() => supplierTable.id),
-  warehouseLocation: text("warehouse_location"),
+  warehouse: text("warehouse"),
   paymentDate: timestamp("payment_date", { mode: "string" }),
   expectedImportDate: timestamp("expected_import_date", { mode: "string" }),
   status: receiptImportStatus("status").notNull(),

@@ -8,7 +8,6 @@ import {
   UpdateProduct,
   productTable,
 } from "../schemas/product.schema.ts";
-import { supplierTable } from "../schemas/supplier.schema.ts";
 import { productInventoryLogTable } from "../schemas/product-inventory-log.schema.ts";
 
 import type {
@@ -18,6 +17,16 @@ import type {
 } from "../../common/types/index.d.ts";
 import { PgTx } from "../custom/data-types.ts";
 import { InventoryChangeType } from "../enums/inventory.enum.ts";
+import { supplierTable } from "../schemas/supplier.schema.ts";
+import { productSupplierTable } from "../schemas/product-supplier.schema.ts";
+
+interface ProductWithSuppliers extends SelectProduct {
+  suppliers: Array<{
+    id: string;
+    name: string;
+    costPrice: number;
+  }>;
+}
 
 @singleton()
 export class ProductRepository {
@@ -38,8 +47,8 @@ export class ProductRepository {
     return db
       .insert(productTable)
       .values(data)
-      .onConflictDoNothing({ target: productTable.productCode });
-    // .returning({ id: productTable.id });
+      .onConflictDoNothing({ target: productTable.productCode })
+      .returning({ id: productTable.id });
   }
 
   createProductOnConflictDoUpdate(data: InsertProduct[], tx?: PgTx) {
@@ -50,7 +59,6 @@ export class ProductRepository {
       .onConflictDoUpdate({
         target: productTable.productCode,
         set: {
-          index: sql`EXCLUDED.index`,
           productCode: sql`EXCLUDED.product_code`,
           productName: sql`EXCLUDED.product_name`,
           sellingPrice: sql`EXCLUDED.selling_price`,
@@ -58,46 +66,57 @@ export class ProductRepository {
           inventory: sql`EXCLUDED.inventory`,
           unit: sql`EXCLUDED.unit`,
           category: sql`EXCLUDED.category`,
-          supplier: sql`EXCLUDED.supplier`,
-          additionalDescription: sql`EXCLUDED.additional_description`,
+          description: sql`EXCLUDED.description`,
           imageUrls: sql`EXCLUDED.image_urls`,
-          warehouseLocation: sql`EXCLUDED.warehouse_location`,
+          warehouse: sql`EXCLUDED.warehouse`,
           status: sql`EXCLUDED.status`,
         },
-      });
-    // .returning({ id: productTable.id });
+      })
+      .returning({ id: productTable.id });
   }
 
   async findProductByIdentity(
     identity: string,
-    opts: Pick<RepositoryOption, "select">
-  ): Promise<RepositoryResult> {
+    opts: Pick<RepositoryOption, "select"> & { withSuppliers?: boolean }
+  ): Promise<RepositoryResult<ProductWithSuppliers>> {
     const isUUID = identity.match(
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
     );
     const column = isUUID ? productTable.id : productTable.productCode;
 
     const query = database
-      .selectDistinct(opts.select)
+      .select(opts.select)
       .from(productTable)
-      .leftJoin(supplierTable, eq(supplierTable.id, productTable.supplier))
-      .where(and(eq(column, identity)));
+
+    if (opts.withSuppliers) {
+      query.leftJoin(
+        productSupplierTable,
+        eq(productSupplierTable.productId, productTable.id)
+      );
+    }
+
+    query.where(eq(column, identity));
 
     const [result] = await query.execute();
-    return { data: result, error: null };
+    return { data: result as ProductWithSuppliers, error: null };
   }
 
   async findProductsByCondition(
-    opts: RepositoryOption
-  ): Promise<RepositoryResult> {
+    opts: RepositoryOption & { withSuppliers?: boolean }
+  ): Promise<RepositoryResult<ProductWithSuppliers[]>> {
     let count: number | null = null;
     const filters: SQL[] = [...opts.where];
 
-    const query = database
-      .select(opts.select)
-      .from(productTable)
-      .leftJoin(supplierTable, eq(supplierTable.id, productTable.supplier))
-      .where(and(...filters));
+    const query = database.select(opts.select).from(productTable);
+
+    if (opts.withSuppliers) {
+      query.leftJoin(
+        productSupplierTable,
+        eq(productSupplierTable.productId, productTable.id)
+      );
+    }
+
+    query.where(and(...filters));
 
     if (opts.orderBy) {
       query.orderBy(...opts.orderBy);
@@ -118,22 +137,7 @@ export class ProductRepository {
     }
 
     const results = await query.execute();
-    return { data: results, error: null, count };
-  }
-
-  async getLastIndex() {
-    const lastIndexProduct = await database
-      .select()
-      .from(productTable)
-      .orderBy(desc(productTable.index))
-      .limit(1)
-      .execute();
-
-    if (!lastIndexProduct.length) {
-      return { data: 0, error: null };
-    }
-
-    return { data: lastIndexProduct[0].index, error: null };
+    return { data: results as ProductWithSuppliers[], error: null, count };
   }
 
   async updateProduct(

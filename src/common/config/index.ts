@@ -42,6 +42,7 @@ export const DbTables = Object.freeze({
   ReceiptItems: "receipt_items",
   Suppliers: "suppliers",
   ProductInventoryLogs: "product_inventory_logs",
+  ProductSuppliers: "product_suppliers",
 });
 
 export default parsedConfig.data;

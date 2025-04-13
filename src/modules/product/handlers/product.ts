@@ -1,6 +1,6 @@
 import { singleton, inject } from "tsyringe";
 import { Context } from "hono";
-import { or, ilike, eq, desc, inArray, lte, gte } from "drizzle-orm";
+import { or, ilike, eq, desc, inArray, lte, gte, sql } from "drizzle-orm";
 import dayjs from "dayjs";
 import * as XLSX from "xlsx";
 
@@ -13,6 +13,10 @@ import {
   type UpdateProduct,
 } from "../../../database/schemas/product.schema.ts";
 import { supplierTable } from "../../../database/schemas/supplier.schema.ts";
+import {
+  productSupplierTable,
+  type InsertProductSupplier,
+} from "../../../database/schemas/product-supplier.schema.ts";
 
 import {
   getPagination,
@@ -25,6 +29,7 @@ import { database } from "../../../common/config/database.ts";
 import { SupplierStatus } from "../../supplier/enums/supplier.enum.ts";
 import { ReceiptItemRepository } from "../../../database/repositories/receipt-item.repository.ts";
 import { receiptItemTable } from "../../../database/schemas/receipt-item.schema.ts";
+import { ProductSupplier } from "../../../database/types/product.type.ts";
 
 @singleton()
 export default class ProductHandler {
@@ -32,11 +37,13 @@ export default class ProductHandler {
     @inject(ProductRepository) private productRepository: ProductRepository,
     @inject(SupplierRepository) private supplierRepository: SupplierRepository,
     @inject(ReceiptItemRepository)
-    private receiptItemRepository: ReceiptItemRepository,
+    private receiptItemRepository: ReceiptItemRepository
   ) {}
 
   async createProduct(ctx: Context) {
-    const body = await parseBodyJson<InsertProduct>(ctx);
+    const body = await parseBodyJson<
+      InsertProduct & { suppliers?: Array<{ id: string; costPrice: number }> }
+    >(ctx);
     const {
       category,
       productName,
@@ -44,36 +51,58 @@ export default class ProductHandler {
       costPrice,
       inventory,
       unit,
-      supplier,
-      additionalDescription,
-      warehouseLocation,
+      suppliers,
+      description,
+      warehouse,
       status,
     } = body;
 
-    const { data: lastIndex } = await this.productRepository.getLastIndex();
-    const productCode = generateProductCode(lastIndex!);
+    const productCode = generateProductCode();
 
-    const { data: products } = await this.productRepository.createProduct({
-      index: lastIndex! + 1,
-      productCode,
-      productName,
-      sellingPrice,
-      costPrice,
-      inventory,
-      unit,
-      category,
-      supplier,
-      additionalDescription,
-      warehouseLocation,
-      status,
+    // Start a transaction to handle both product and supplier relationships
+    const result = await database.transaction(async (tx) => {
+      // Create product first
+      const { data: products } = await this.productRepository.createProduct(
+        {
+          productCode,
+          productName,
+          sellingPrice,
+          costPrice,
+          inventory,
+          unit,
+          category,
+          description,
+          warehouse,
+          status,
+        },
+        tx
+      );
+
+      if (!products.length) {
+        throw new Error("Can't create product");
+      }
+
+      const productId = products[0].id;
+
+      // Create product-supplier relationships if suppliers are provided
+      if (suppliers && suppliers.length > 0) {
+        const productSuppliers: InsertProductSupplier[] = suppliers.map(
+          (supplier) => ({
+            productId,
+            supplierId: supplier.id,
+            costPrice: supplier.costPrice,
+            createdAt: new Date().toISOString(),
+          })
+        );
+
+        await tx.insert(productSupplierTable).values(productSuppliers);
+      }
+
+      return { id: productId, productCode };
     });
 
-    if (!products.length) {
-      throw new Error("Can't create product");
-    }
-
     return ctx.json({
-      data: { id: products[0].id, productCode },
+      data: result,
       success: true,
       statusCode: 201,
     });
@@ -81,7 +110,9 @@ export default class ProductHandler {
 
   async updateProduct(ctx: Context) {
     const id = ctx.req.param("id");
-    const body = await parseBodyJson<UpdateProduct>(ctx);
+    const body = await parseBodyJson<
+      UpdateProduct & { suppliers?: Array<{ id: string; costPrice: number }> }
+    >(ctx);
 
     const {
       productName,
@@ -90,41 +121,68 @@ export default class ProductHandler {
       sellingPrice,
       costPrice,
       inventory,
-      supplier,
-      additionalDescription,
-      warehouseLocation,
+      suppliers,
+      description,
+      warehouse,
       unit,
     } = body;
 
-    const dataUpdate: Partial<UpdateProduct> = {
-      updatedAt: dayjs().toISOString(),
-    };
+    const result = await database.transaction(async (tx) => {
+      // Update product details
+      const dataUpdate: Partial<UpdateProduct> = {
+        updatedAt: dayjs().toISOString(),
+      };
 
-    if (productName) dataUpdate.productName = productName;
-    if (status) dataUpdate.status = status;
-    if (category) dataUpdate.category = category;
-    if (sellingPrice) dataUpdate.sellingPrice = sellingPrice;
-    if (costPrice) dataUpdate.costPrice = costPrice;
-    if (inventory) dataUpdate.inventory = inventory;
-    if (supplier) dataUpdate.supplier = supplier;
-    if (additionalDescription)
-      dataUpdate.additionalDescription = additionalDescription;
-    if (warehouseLocation) dataUpdate.warehouseLocation = warehouseLocation;
-    if (unit) dataUpdate.unit = unit;
+      if (productName) dataUpdate.productName = productName;
+      if (status) dataUpdate.status = status;
+      if (category) dataUpdate.category = category;
+      if (sellingPrice) dataUpdate.sellingPrice = sellingPrice;
+      if (costPrice) dataUpdate.costPrice = costPrice;
+      if (inventory) dataUpdate.inventory = inventory;
+      if (description) dataUpdate.description = description;
+      if (warehouse) dataUpdate.warehouse = warehouse;
+      if (unit) dataUpdate.unit = unit;
 
-    const { data: productUpdated } = await this.productRepository.updateProduct(
-      {
-        set: dataUpdate,
-        where: [eq(productTable.id, id)],
-      },
-    );
+      const { data: productUpdated } =
+        await this.productRepository.updateProduct(
+          {
+            set: dataUpdate,
+            where: [eq(productTable.id, id)],
+          },
+          tx
+        );
 
-    if (!productUpdated.length) {
-      throw new Error("Can't update product");
-    }
+      if (!productUpdated.length) {
+        throw new Error("Can't update product");
+      }
+
+      // Update supplier relationships if provided
+      if (suppliers !== undefined) {
+        // Delete existing relationships
+        await tx
+          .delete(productSupplierTable)
+          .where(eq(productSupplierTable.productId, id));
+
+        // Insert new relationships
+        if (suppliers.length > 0) {
+          const productSuppliers: InsertProductSupplier[] = suppliers.map(
+            (supplier) => ({
+              productId: id,
+              supplierId: supplier.id,
+              costPrice: supplier.costPrice,
+              updatedAt: new Date().toISOString(),
+            })
+          );
+
+          await tx.insert(productSupplierTable).values(productSuppliers);
+        }
+      }
+
+      return { id };
+    });
 
     return ctx.json({
-      data: { id },
+      data: result,
       success: true,
       statusCode: 200,
     });
@@ -133,13 +191,20 @@ export default class ProductHandler {
   async deleteProduct(ctx: Context) {
     const id = ctx.req.param("id");
 
-    const { data: product } = await this.productRepository.deleteProduct(id);
-    if (!product.length) {
-      throw new Error("Product not found");
-    }
+    const result = await database.transaction(async (tx) => {
+      // Product-supplier relationships will be automatically deleted due to CASCADE
+      const { data: product } = await this.productRepository.deleteProduct(
+        id,
+        tx
+      );
+      if (!product.length) {
+        throw new Error("Product not found");
+      }
+      return product;
+    });
 
     return ctx.json({
-      data: product,
+      data: result,
       success: true,
       statusCode: 204,
     });
@@ -159,20 +224,35 @@ export default class ProductHandler {
           sellingPrice: productTable.sellingPrice,
           costPrice: productTable.costPrice,
           inventory: productTable.inventory,
-          supplier: {
-            id: supplierTable.id,
-            name: supplierTable.name,
-          },
-          additionalDescription: productTable.additionalDescription,
+          description: productTable.description,
           imageUrls: productTable.imageUrls,
-          warehouseLocation: productTable.warehouseLocation,
+          warehouse: productTable.warehouse,
           status: productTable.status,
           createdAt: productTable.createdAt,
           updatedAt: productTable.updatedAt,
+          suppliers: sql`
+            COALESCE(
+              (
+                SELECT json_agg(
+                  json_build_object(
+                    'id', s.id,
+                    'name', s.name,
+                    'costPrice', ps.cost_price
+                  )
+                )
+                FROM ${productSupplierTable} ps
+                LEFT JOIN ${supplierTable} s ON s.id = ps.supplier_id
+                WHERE ps.product_id = ${productTable.id}
+              ),
+              '[]'::json
+            )
+          `,
         },
+        withSuppliers: true,
       });
+
     if (!product) {
-      throw new Error("product not found");
+      throw new Error("Product not found");
     }
 
     return ctx.json({
@@ -193,8 +273,8 @@ export default class ProductHandler {
       filters.push(
         or(
           ilike(productTable.productCode, `%${keyword}%`),
-          ilike(productTable.productName, `%${keyword}%`),
-        ),
+          ilike(productTable.productName, `%${keyword}%`)
+        )
       );
     }
 
@@ -203,7 +283,7 @@ export default class ProductHandler {
     }
 
     if (suppliers && suppliers.length) {
-      filters.push(inArray(productTable.supplier, suppliers));
+      filters.push(inArray(productSupplierTable.supplierId, suppliers));
     }
 
     if (maxPrice) {
@@ -227,43 +307,62 @@ export default class ProductHandler {
       limit: +(query.limit || 10),
     });
 
-    const { data: products, count } =
-      await this.productRepository.findProductsByCondition({
-        select: {
-          id: productTable.id,
-          category: productTable.category,
-          productCode: productTable.productCode,
-          productName: productTable.productName,
-          unit: productTable.unit,
-          sellingPrice: productTable.sellingPrice,
-          costPrice: productTable.costPrice,
-          inventory: productTable.inventory,
-          supplier: {
-            id: supplierTable.id,
-            name: supplierTable.name,
+    try {
+      const { data: products, count } =
+        await this.productRepository.findProductsByCondition({
+          select: {
+            id: productTable.id,
+            category: productTable.category,
+            productCode: productTable.productCode,
+            productName: productTable.productName,
+            unit: productTable.unit,
+            sellingPrice: productTable.sellingPrice,
+            costPrice: productTable.costPrice,
+            inventory: productTable.inventory,
+            description: productTable.description,
+            imageUrls: productTable.imageUrls,
+            warehouse: productTable.warehouse,
+            status: productTable.status,
+            createdAt: productTable.createdAt,
+            updatedAt: productTable.updatedAt,
+            suppliers: sql`
+              COALESCE(
+                (
+                  SELECT json_agg(
+                    json_build_object(
+                      'id', s.id,
+                      'name', s.name,
+                      'costPrice', ps.cost_price
+                    )
+                  )
+                  FROM ${productSupplierTable} ps
+                  LEFT JOIN ${supplierTable} s ON s.id = ps.supplier_id
+                  WHERE ps.product_id = ${productTable.id}
+                ),
+                '[]'::json
+              )
+            `,
           },
-          additionalDescription: productTable.additionalDescription,
-          imageUrls: productTable.imageUrls,
-          warehouseLocation: productTable.warehouseLocation,
-          status: productTable.status,
-          createdAt: productTable.createdAt,
-          updatedAt: productTable.updatedAt,
-        },
-        where: filters,
-        orderBy: [desc(productTable.index)],
-        limit,
-        offset,
-        isCount: true,
+          where: filters,
+          orderBy: [desc(productTable.createdAt)],
+          limit,
+          offset,
+          isCount: true,
+          withSuppliers: true,
+        });
+
+      const metadata = getPaginationMetadata(page, limit, offset, count!);
+
+      return ctx.json({
+        data: products,
+        metadata,
+        success: true,
+        statusCode: 200,
       });
-
-    const metadata = getPaginationMetadata(page, limit, offset, count!);
-
-    return ctx.json({
-      data: products,
-      metadata,
-      success: true,
-      statusCode: 200,
-    });
+    } catch (error) {
+      console.error(error);
+      throw error;
+    }
   }
 
   async getTotalProductAndInventory(ctx: Context) {
@@ -398,7 +497,7 @@ export default class ProductHandler {
             const sheet = workbook.Sheets[sheetName];
             const sheetData: any[] = XLSX.utils.sheet_to_json(sheet);
 
-            const batchSize = 1000;
+            const batchSize = 500;
             const batches: any[] = [];
 
             for (let i = 0; i < sheetData.length; i += batchSize) {
@@ -408,85 +507,114 @@ export default class ProductHandler {
             await database.transaction(async (tx) => {
               for (const batch of batches) {
                 const productsAsync = batch.map(async (row) => {
-                  const code = row["Mã hàng"];
-                  const [, index] = code.split("NK");
+                  const productCode = generateProductCode();
+                  const costPrice = row["Giá vốn"];
+                  const suppliers = row["Nhà Cung Cấp"];
+                  let productSuppliers: InsertProductSupplier[] = [];
 
-                  if (!index || isNaN(index)) {
-                    return {
-                      success: false,
-                      message: `Product code invalid: ${code}`,
-                      statusCode: 400,
-                    };
-                  }
+                  if (suppliers) {
+                    const supplierNames = suppliers.split(";");
 
-                  const count = parseInt(index);
-                  const productCode = generateProductCode(count - 1);
-                  const supplierName = row["Nhà Cung Cấp"];
-                  let supplierId = "";
+                    const asyncTasks = supplierNames.map(async (name) => {
+                      const { data: supplier } =
+                        await this.supplierRepository.findSupplierByName(
+                          name.trim(),
+                          {
+                            select: {
+                              id: supplierTable.id,
+                              name: supplierTable.name,
+                            },
+                          }
+                        );
 
-                  if (supplierName) {
-                    const supplier =
-                      await this.supplierRepository.findSupplierByName(
-                        supplierName.trim(),
-                        {
-                          select: {
-                            id: supplierTable.id,
-                            name: supplierTable.name,
-                          },
-                        },
-                      );
+                      if (supplier?.id) {
+                        return {
+                          id: supplier.id,
+                          costPrice,
+                        };
+                      } else {
+                        const { data: newSupplier } =
+                          await this.supplierRepository.createSupplier({
+                            name: name.trim(),
+                            status: SupplierStatus.COLLABORATING,
+                          });
 
-                    if (supplier.data?.id) {
-                      supplierId = supplier.data.id;
-                    } else {
-                      const { data: newSupplier } =
-                        await this.supplierRepository.createSupplier({
-                          name: supplierName.trim(),
-                          status: SupplierStatus.COLLABORATING,
-                        });
+                        return {
+                          id: newSupplier[0].id,
+                          costPrice,
+                        };
+                      }
+                    });
 
-                      supplierId = newSupplier[0].id;
-                    }
+                    const newSuppliers = await Promise.all(asyncTasks);
+
+                    // Store suppliers for later use after product creation
+                    productSuppliers = newSuppliers.map((supplier) => ({
+                      productId: "",
+                      supplierId: supplier.id,
+                      costPrice: supplier.costPrice,
+                    }));
                   }
 
                   const product: Record<string, string | number> = {
-                    index: count,
                     productCode,
                     productName: row["Tên hàng"],
+                    costPrice,
                     sellingPrice: row["Giá bán"],
-                    costPrice: row["Giá vốn"],
                     inventory: row["Tồn kho"],
                     unit: row["ĐVT"],
-                    category: row["Nhóm hàng(3 Cấp)"],
-                    additionalDescription: row["Mô tả thêm"],
-                    imageUrls: row["Hình ảnh (url1,url2...)"]?.split(",") ?? [],
-                    warehouseLocation: row["Vị trí"],
+                    category: row["Nhóm hàng"],
+                    description: row["Mô tả"],
+                    note: row["Ghi chú"],
+                    imageUrls: row["Hình ảnh"]?.split(",") ?? [],
+                    warehouse: row["Vị trí"],
                     status: ProductStatus.ACTIVE,
                   };
 
-                  if (supplierId) {
-                    product.supplier = supplierId;
-                  }
-
-                  return product;
+                  return { product, productSuppliers };
                 });
-                const products = await Promise.all(productsAsync);
 
-                const validProducts = products.filter(
-                  (product) => product.success !== false,
+                const productsAndSuppliers = await Promise.all(productsAsync);
+
+                // Insert products first
+                let createdProducts;
+                if (query.type === "2") {
+                  createdProducts =
+                    await this.productRepository.createProductOnConflictDoUpdate(
+                      productsAndSuppliers.map((item) => item.product),
+                      tx
+                    );
+                } else {
+                  createdProducts =
+                    await this.productRepository.createProductOnConflictDoNothing(
+                      productsAndSuppliers.map((item) => item.product),
+                      tx
+                    );
+                }
+
+                // Insert product-supplier relationships
+                const productSuppliersAsync = createdProducts.map(
+                  async (product, index) => {
+                    const productSuppliers =
+                      productsAndSuppliers[index].productSuppliers;
+
+                    if (productSuppliers.length) {
+                      const productSupplierValues = productSuppliers.map(
+                        (supplier) => ({
+                          ...supplier,
+                          productId: product.id,
+                        })
+                      );
+
+                      await tx
+                        .insert(productSupplierTable)
+                        .values(productSupplierValues);
+                    }
+                  }
                 );
 
-                if (query.type === "2") {
-                  await this.productRepository.createProductOnConflictDoUpdate(
-                    validProducts,
-                    tx,
-                  );
-                } else {
-                  await this.productRepository.createProductOnConflictDoNothing(
-                    validProducts,
-                    tx,
-                  );
-                }
+                await Promise.all(productSuppliersAsync);
+                // End of batch processing
               }
             });
 
@@ -528,13 +656,9 @@ export default class ProductHandler {
         sellingPrice: productTable.sellingPrice,
         costPrice: productTable.costPrice,
         inventory: productTable.inventory,
-        supplier: {
-          id: supplierTable.id,
-          name: supplierTable.name,
-        },
-        additionalDescription: productTable.additionalDescription,
+        description: productTable.description,
         imageUrls: productTable.imageUrls,
-        warehouseLocation: productTable.warehouseLocation,
+        warehouse: productTable.warehouse,
         status: productTable.status,
         createdAt: productTable.createdAt,
         updatedAt: productTable.updatedAt,

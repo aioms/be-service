@@ -129,7 +129,7 @@ export default class ReceiptCheckHandler {
         case "note":
           action = `${user} đã thay đổi ghi chú`;
           break;
-        case "warehouseLocation":
+        case "warehouse":
           action = `${user} đã thay đổi kho`;
           break;
         case "supplier":

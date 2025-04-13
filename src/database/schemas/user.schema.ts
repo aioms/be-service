@@ -6,12 +6,17 @@ import {
   uuid,
   jsonb,
 } from "drizzle-orm/pg-core";
-import { UserStatus } from "../../modules/auth/enums/user.enum.ts";
 import { DbTables } from "../../common/config/index.ts";
+import { UserRole, UserStatus } from "../enums/user.enum.ts";
 
 export const userStatus = pgEnum(
   "user_status",
   Object.values(UserStatus) as [string, ...string[]],
+);
+
+export const userRole = pgEnum(
+  "user_role",
+  Object.values(UserRole) as [string, ...string[]],
 );
 
 export const userTable = pgTable(DbTables.Users, {
@@ -22,9 +27,9 @@ export const userTable = pgTable(DbTables.Users, {
   salt: text("salt"),
   fullname: text("fullname"),
   phone: text("phone"),
-  role: text("role"),
   storeCode: text("store_code"),
-  status: userStatus("status").notNull(),
+  role: userRole("role"),
+  status: userStatus("status").notNull().default(UserStatus.ACTIVE),
   tokenVersion: text("token_version"),
   metadata: jsonb("metadata"),
   createdAt: timestamp("created_at", { mode: "string" }).defaultNow(),

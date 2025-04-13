@@ -22,6 +22,7 @@ export class SupplierRepository {
       .insert(supplierTable)
       .values(data)
       .returning({ id: supplierTable.id });
+
     return { data: result, error: null };
   }
 

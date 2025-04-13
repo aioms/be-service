@@ -1,6 +1,6 @@
 import { singleton, inject } from "tsyringe";
 import { Context } from "hono";
-import { desc, eq, ilike, or } from "drizzle-orm";
+import { desc, eq, ilike, or, sql } from "drizzle-orm";
 import { customAlphabet } from "nanoid";
 import dayjs from "dayjs";
 import * as XLSX from "xlsx";
@@ -230,7 +230,7 @@ export default class SupplierHandler {
     const query = ctx.req.query();
     const { keyword } = query;
     const filters: any = [
-      eq(productTable.supplier, supplierId),
+      sql`${productTable.suppliers}::jsonb ?| array[${supplierId}]`,
     ];
 
     if (keyword) {

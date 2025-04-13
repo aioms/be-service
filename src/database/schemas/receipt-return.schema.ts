@@ -41,7 +41,7 @@ export const receiptReturnTable = pgTable(DbTables.ReceiptReturns, {
   totalProduct: integer("total_product").notNull(),
   totalAmount: customNumeric("total_amount").notNull(),
   reason: text("reason"),
-  warehouseLocation: text("warehouse_location"),
+  warehouse: text("warehouse"),
   supplier: uuid("supplier").references(() => supplierTable.id),
   status: receiptReturnStatus("status").notNull(),
   type: receiptReturnType("type").notNull(),

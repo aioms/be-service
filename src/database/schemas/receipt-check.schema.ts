@@ -34,7 +34,7 @@ export const receiptCheckTable = pgTable(DbTables.ReceiptChecks, {
   receiptNumber: text("receipt_number").unique().notNull(),
   note: text("note"),
   periodic: text("periodic"), // Đợt kiểm: Q1, Q2, Q3, Q4, đột xuất
-  warehouseLocation: text("warehouse_location"),
+  warehouse: text("warehouse"),
   supplier: uuid("supplier")
     .notNull()
     .references(() => supplierTable.id),

@@ -11,7 +11,7 @@ export interface CreateReceiptReturnRequestDto {
   totalProduct: number;
   totalAmount: number;
   reason: string;
-  warehouseLocation: string;
+  warehouse: string;
   supplier: string;
   type: string;
   status: ReceiptReturnStatus;
@@ -26,7 +26,7 @@ export interface UpdateReceiptReturnRequestDto {
   totalProduct: number;
   totalAmount: number;
   reason: string;
-  warehouseLocation: string;
+  warehouse: string;
   supplier: string;
   status: ReceiptReturnStatus;
   returnDate: string;
