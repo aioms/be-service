@@ -116,8 +116,9 @@ export class SupplierRepository {
     return db
       .insert(supplierTable)
       .values(data)
+      .returning({ id: supplierTable.id })
       .onConflictDoNothing({
-        target: [supplierTable.code],
+        target: supplierTable.name, // Using single unique constraint
       });
   }
 
@@ -127,10 +128,8 @@ export class SupplierRepository {
       .insert(supplierTable)
       .values(data)
       .onConflictDoUpdate({
-        target: [supplierTable.code],
+        target: supplierTable.name, // Using single unique constraint
         set: {
-          code: sql`EXCLUDED.code`,
-          name: sql`EXCLUDED.name`,
           email: sql`EXCLUDED.email`,
           phone: sql`EXCLUDED.phone`,
           address: sql`EXCLUDED.address`,
@@ -141,6 +140,7 @@ export class SupplierRepository {
           totalPurchased: sql`EXCLUDED.total_purchased`,
           status: sql`EXCLUDED.status`,
         },
-      });
+      })
+      .returning({ id: supplierTable.id });
   }
 }

@@ -35,6 +35,7 @@ import {
 import { SupplierStatus } from "../enums/supplier.enum.ts";
 import { ResponseType } from "../../../common/types/index.d.ts";
 import { database } from "../../../common/config/database.ts";
+import { generateSupplierCode } from "../utils/supplier.util.ts";
 
 @singleton()
 export default class SupplierHandler {
@@ -54,8 +55,7 @@ export default class SupplierHandler {
     const { name, email, phone, address, company, note, taxCode, status } =
       body;
 
-    const random = customAlphabet("1234567890", 10);
-    const code = `NCC${random()}`;
+    const code = generateSupplierCode();
 
     const newRecord: InsertSupplier = {
       code,
@@ -229,9 +229,7 @@ export default class SupplierHandler {
     const supplierId = ctx.req.param("id");
     const query = ctx.req.query();
     const { keyword } = query;
-    const filters: any = [
-      sql`${productTable.suppliers}::jsonb ?| array[${supplierId}]`,
-    ];
+    const filters: any = [];
 
     if (keyword) {
       filters.push(
@@ -259,7 +257,7 @@ export default class SupplierHandler {
           updatedAt: productTable.updatedAt,
         },
         where: filters,
-        orderBy: [desc(productTable.index)],
+        orderBy: [desc(productTable.createdAt)],
         limit,
         offset,
         isCount: true,
@@ -392,8 +390,11 @@ export default class SupplierHandler {
             await database.transaction(async (tx) => {
               for (const batch of batches) {
                 const items = batch.map((row) => {
+
+                  const code = generateSupplierCode();
                   const item = {
-                    code: row["Mã nhà cung cấp"],
+                    // code: row["Mã nhà cung cấp"],
+                    code,
                     name: row["Tên nhà cung cấp"],
                     phone: row["Điện thoại"],
                     email: row["Email"],

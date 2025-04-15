@@ -35,20 +35,20 @@ services:
       - "${DOCKER_POSTGRES_PORT}:5432"
 
   # Redis Service
-  redis:
-    image: redis:alpine
-    container_name: aios-redis
-    restart: unless-stopped
-    volumes:
-      - redis-data:/data
-    networks:
-      - aios-network
-    ports:
-      - "${DOCKER_REDIS_PORT}:6379"
+  # redis:
+  #   image: redis:alpine
+  #   container_name: aios-redis
+  #   restart: unless-stopped
+  #   volumes:
+  #     - redis-data:/data
+  #   networks:
+  #     - aios-network
+  #   ports:
+  #     - "${DOCKER_REDIS_PORT}:6379"
 
 volumes:
   postgres-data:
-  redis-data:
+  # redis-data:
 
 networks:
   aios-network:

@@ -5,12 +5,12 @@
     "test": "deno test --allow-net --allow-env --unstable",
     "init": "deno install --node-modules-dir",
     "studio": "deno run -A npm:drizzle-kit studio",
-    "db:push": "deno --env -A --node-modules-dir npm:drizzle-kit push",
-    "db:migrate": "deno --env -A --node-modules-dir npm:drizzle-kit migrate",
-    "db:generate": "deno --env -A --node-modules-dir npm:drizzle-kit generate",
+    "db:push": "deno --env -A --node-modules-dir npm:drizzle-kit push --config=drizzle-dev.config.ts",
+    "db:generate": "deno --env -A --node-modules-dir npm:drizzle-kit generate --config=drizzle-dev.config.ts",
+    "db:migrate": "deno --env -A --node-modules-dir npm:drizzle-kit migrate --config=drizzle-dev.config.ts",
     "db:seed": "deno run --env -A src/database/seeds/init.ts",
     "db:reset": "deno run --env -A src/database/seeds/reset.ts",
-    "db:check": "deno run -A npm:drizzle-kit check"
+    "db:check": "deno run -A npm:drizzle-kit check --config=drizzle-dev.config.ts"
   },
   "compilerOptions": {
     "jsx": "precompile",

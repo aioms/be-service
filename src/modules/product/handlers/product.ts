@@ -126,6 +126,7 @@ export default class ProductHandler {
       warehouse,
       unit,
     } = body;
+    console.log({ body })
 
     const result = await database.transaction(async (tx) => {
       // Update product details
@@ -156,27 +157,26 @@ export default class ProductHandler {
         throw new Error("Can't update product");
       }
 
-      // Update supplier relationships if provided
-      if (suppliers !== undefined) {
-        // Delete existing relationships
-        await tx
-          .delete(productSupplierTable)
-          .where(eq(productSupplierTable.productId, id));
+      // if (suppliers !== undefined) {
+      //   // Delete existing relationships
+      //   await tx
+      //     .delete(productSupplierTable)
+      //     .where(eq(productSupplierTable.productId, id));
 
-        // Insert new relationships
-        if (suppliers.length > 0) {
-          const productSuppliers: InsertProductSupplier[] = suppliers.map(
-            (supplier) => ({
-              productId: id,
-              supplierId: supplier.id,
-              costPrice: supplier.costPrice,
-              updatedAt: new Date().toISOString(),
-            })
-          );
+      //   // Insert new relationships
+      //   if (suppliers.length > 0) {
+      //     const productSuppliers: InsertProductSupplier[] = suppliers.map(
+      //       (supplier) => ({
+      //         productId: id,
+      //         supplierId: supplier.id,
+      //         costPrice: supplier.costPrice,
+      //         updatedAt: new Date().toISOString(),
+      //       })
+      //     );
 
-          await tx.insert(productSupplierTable).values(productSuppliers);
-        }
-      }
+      //     await tx.insert(productSupplierTable).values(productSuppliers);
+      //   }
+      // }
 
       return { id };
     });
@@ -516,34 +516,15 @@ export default class ProductHandler {
                     const supplierNames = suppliers.split(";");
 
                     const asyncTasks = supplierNames.map(async (name) => {
-                      const { data: supplier } =
-                        await this.supplierRepository.findSupplierByName(
-                          name.trim(),
-                          {
-                            select: {
-                              id: supplierTable.id,
-                              name: supplierTable.name,
-                            },
-                          }
-                        );
+                      const result = await this.supplierRepository.createSupplierOnConflictDoUpdate({
+                        name: name.trim(),
+                        status: SupplierStatus.COLLABORATING,
+                      }, tx)
 
-                      if (supplier?.id) {
-                        return {
-                          id: supplier.id,
-                          costPrice,
-                        };
-                      } else {
-                        const { data: newSupplier } =
-                          await this.supplierRepository.createSupplier({
-                            name: name.trim(),
-                            status: SupplierStatus.COLLABORATING,
-                          });
-
-                        return {
-                          id: newSupplier[0].id,
-                          costPrice,
-                        };
-                      }
+                      return {
+                        id: result[0].id,
+                        costPrice,
+                      };
                     });
 
                     const newSuppliers = await Promise.all(asyncTasks);

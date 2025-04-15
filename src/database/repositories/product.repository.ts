@@ -17,7 +17,6 @@ import type {
 } from "../../common/types/index.d.ts";
 import { PgTx } from "../custom/data-types.ts";
 import { InventoryChangeType } from "../enums/inventory.enum.ts";
-import { supplierTable } from "../schemas/supplier.schema.ts";
 import { productSupplierTable } from "../schemas/product-supplier.schema.ts";
 
 interface ProductWithSuppliers extends SelectProduct {
@@ -47,7 +46,7 @@ export class ProductRepository {
     return db
       .insert(productTable)
       .values(data)
-      .onConflictDoNothing({ target: productTable.productCode })
+      .onConflictDoNothing({ target: productTable.productName })
       .returning({ id: productTable.id });
   }
 
@@ -57,14 +56,8 @@ export class ProductRepository {
       .insert(productTable)
       .values(data)
       .onConflictDoUpdate({
-        target: productTable.productCode,
+        target: productTable.productName,
         set: {
-          productCode: sql`EXCLUDED.product_code`,
-          productName: sql`EXCLUDED.product_name`,
-          sellingPrice: sql`EXCLUDED.selling_price`,
-          costPrice: sql`EXCLUDED.cost_price`,
-          inventory: sql`EXCLUDED.inventory`,
-          unit: sql`EXCLUDED.unit`,
           category: sql`EXCLUDED.category`,
           description: sql`EXCLUDED.description`,
           imageUrls: sql`EXCLUDED.image_urls`,
@@ -86,7 +79,7 @@ export class ProductRepository {
 
     const query = database
       .select(opts.select)
-      .from(productTable)
+      .from(productTable);
 
     if (opts.withSuppliers) {
       query.leftJoin(
@@ -95,7 +88,7 @@ export class ProductRepository {
       );
     }
 
-    query.where(eq(column, identity));
+    query.where(eq(column, identity)).groupBy(productTable.id);
 
     const [result] = await query.execute();
     return { data: result as ProductWithSuppliers, error: null };
@@ -116,7 +109,9 @@ export class ProductRepository {
       );
     }
 
-    query.where(and(...filters));
+    query
+      .where(and(...filters))
+      .groupBy(productTable.id);
 
     if (opts.orderBy) {
       query.orderBy(...opts.orderBy);
@@ -158,10 +153,11 @@ export class ProductRepository {
 
   async deleteProduct(id: SelectProduct["id"], tx?: PgTx) {
     const db = tx || database;
-    const result = await db
-      .delete(productTable)
-      .where(eq(productTable.id, id))
-      .returning({ id: productTable.id });
+
+    const [result] = await Promise.all([
+      db.delete(productTable).where(eq(productTable.id, id)).returning({ id: productTable.id }),
+      db.delete(productInventoryLogTable).where(eq(productInventoryLogTable.productId, id)),
+    ])
 
     return { data: result, error: null };
   }
