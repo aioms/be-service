@@ -1,7 +1,6 @@
 import { singleton, inject } from "tsyringe";
 import { Context } from "hono";
-import { desc, eq, ilike, or, sql } from "drizzle-orm";
-import { customAlphabet } from "nanoid";
+import { desc, eq, ilike, or } from "drizzle-orm";
 import dayjs from "dayjs";
 import * as XLSX from "xlsx";
 
@@ -380,7 +379,7 @@ export default class SupplierHandler {
             const sheet = workbook.Sheets[sheetName];
             const sheetData: any[] = XLSX.utils.sheet_to_json(sheet);
 
-            const batchSize = 1000;
+            const batchSize = 500;
             const batches: any[] = [];
 
             for (let i = 0; i < sheetData.length; i += batchSize) {
@@ -391,10 +390,8 @@ export default class SupplierHandler {
               for (const batch of batches) {
                 const items = batch.map((row) => {
 
-                  const code = generateSupplierCode();
                   const item = {
-                    // code: row["Mã nhà cung cấp"],
-                    code,
+                    code: generateSupplierCode(),
                     name: row["Tên nhà cung cấp"],
                     phone: row["Điện thoại"],
                     email: row["Email"],
@@ -410,17 +407,10 @@ export default class SupplierHandler {
                   return item;
                 });
 
-                if (query.type === "2") {
-                  await this.supplierRepository.createSupplierOnConflictDoUpdate(
-                    items,
-                    tx
-                  );
-                } else {
-                  await this.supplierRepository.createSupplierOnConflictDoNothing(
-                    items,
-                    tx
-                  );
-                }
+                await this.supplierRepository.createSupplierOnConflictDoNothing(
+                  items,
+                  tx
+                );
               }
             });
 

@@ -9,6 +9,7 @@ import {
   productTable,
 } from "../schemas/product.schema.ts";
 import { productInventoryLogTable } from "../schemas/product-inventory-log.schema.ts";
+import { productSupplierTable } from "../schemas/product-supplier.schema.ts";
 
 import type {
   RepositoryOption,
@@ -16,16 +17,7 @@ import type {
   RepositoryResult,
 } from "../../common/types/index.d.ts";
 import { PgTx } from "../custom/data-types.ts";
-import { InventoryChangeType } from "../enums/inventory.enum.ts";
-import { productSupplierTable } from "../schemas/product-supplier.schema.ts";
-
-interface ProductWithSuppliers extends SelectProduct {
-  suppliers: Array<{
-    id: string;
-    name: string;
-    costPrice: number;
-  }>;
-}
+import { ProductWithSuppliers } from "../types/product.type.ts";
 
 @singleton()
 export class ProductRepository {
@@ -46,7 +38,7 @@ export class ProductRepository {
     return db
       .insert(productTable)
       .values(data)
-      .onConflictDoNothing({ target: productTable.productName })
+      .onConflictDoNothing({ target: productTable.productCode })
       .returning({ id: productTable.id });
   }
 
@@ -56,7 +48,7 @@ export class ProductRepository {
       .insert(productTable)
       .values(data)
       .onConflictDoUpdate({
-        target: productTable.productName,
+        target: productTable.productCode,
         set: {
           category: sql`EXCLUDED.category`,
           description: sql`EXCLUDED.description`,
@@ -70,14 +62,15 @@ export class ProductRepository {
 
   async findProductByIdentity(
     identity: string,
-    opts: Pick<RepositoryOption, "select"> & { withSuppliers?: boolean }
-  ): Promise<RepositoryResult<ProductWithSuppliers>> {
+    opts: Pick<RepositoryOption, "select"> & { withSuppliers?: boolean },
+    tx?: PgTx,
+  ): Promise<{ data: ProductWithSuppliers; error: null }> {
     const isUUID = identity.match(
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
     );
     const column = isUUID ? productTable.id : productTable.productCode;
 
-    const query = database
+    const query = tx || database
       .select(opts.select)
       .from(productTable);
 
@@ -91,7 +84,7 @@ export class ProductRepository {
     query.where(eq(column, identity)).groupBy(productTable.id);
 
     const [result] = await query.execute();
-    return { data: result as ProductWithSuppliers, error: null };
+    return { data: result, error: null };
   }
 
   async findProductsByCondition(
@@ -229,7 +222,9 @@ export class ProductRepository {
 
   async getTotalInventory() {
     const count = await database
-      .select({ value: sum(productTable.inventory) })
+      .select({ 
+        value: sql<number>`ROUND(COALESCE(SUM(${productTable.inventory}), 0))` 
+      })
       .from(productTable)
       .execute();
 
@@ -312,98 +307,6 @@ export class ProductRepository {
       x: item.productName,
       y: Number(item.inventory),
     }));
-
-    return {
-      data: dataset,
-      total: totalCount,
-    };
-  }
-
-  async getInventoryTurnoverDataset(opts: {
-    startDate: string;
-    endDate: string;
-    page?: number;
-    limit?: number;
-  }): Promise<{
-    data: { x: string; y: number }[];
-    total: number;
-  }> {
-    const page = opts.page || 1;
-    const limit = opts.limit || 10;
-    const offset = (page - 1) * limit;
-
-    // Get total count for pagination
-    const totalCount = await database.$count(productTable);
-
-    // Calculate inventory turnover for each product
-    const query = database
-      .select({
-        productName: productTable.productName,
-        // Get beginning inventory (inventory at start date)
-        beginningInventory: sql<number>`
-          COALESCE(
-            (
-              SELECT current_inventory
-              FROM ${productInventoryLogTable}
-              WHERE product_id = ${productTable.id}
-              AND created_at < ${opts.startDate}::timestamp
-              ORDER BY created_at DESC
-              LIMIT 1
-            ),
-            ${productTable.inventory}
-          )
-        `,
-        // Get ending inventory (inventory at end date)
-        endingInventory: sql<number>`
-          COALESCE(
-            (
-              SELECT current_inventory
-              FROM ${productInventoryLogTable}
-              WHERE product_id = ${productTable.id}
-              AND created_at <= ${opts.endDate}::timestamp
-              ORDER BY created_at DESC
-              LIMIT 1
-            ),
-            ${productTable.inventory}
-          )
-        `,
-        // Get total goods sold/used in period (sum of negative inventory changes)
-        totalSold: sql<number>`
-          COALESCE(
-            (
-              SELECT SUM(ABS(inventory_change))
-              FROM ${productInventoryLogTable}
-              WHERE product_id = ${productTable.id}
-              AND created_at BETWEEN ${opts.startDate}::timestamp AND ${opts.endDate}::timestamp
-              AND change_type IN (${InventoryChangeType.SALE})
-            ),
-            0
-          )
-        `,
-      })
-      .from(productTable)
-      .orderBy(productTable.productName)
-      .limit(limit)
-      .offset(offset);
-
-    const results = await query.execute();
-
-    // Transform data into chart format with inventory turnover calculation
-    const dataset = results.map((item) => {
-      // Calculate average inventory
-      const averageInventory =
-        (Number(item.beginningInventory) + Number(item.endingInventory)) / 2;
-
-      // Calculate inventory turnover ratio
-      // If average inventory is 0, return 0 to avoid division by zero
-      const turnoverRatio =
-        averageInventory > 0 ? Number(item.totalSold) / averageInventory : 0;
-
-      return {
-        x: item.productName,
-        y: Number(turnoverRatio.toFixed(2)), // Round to 2 decimal places
-      };
-    });
 
     return {
       data: dataset,

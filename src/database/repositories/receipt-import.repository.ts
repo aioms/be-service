@@ -16,7 +16,7 @@ import {
 } from "../schemas/receipt-import.schema.ts";
 import { supplierTable } from "../schemas/supplier.schema.ts";
 
-import { ReceiptImportStatus } from "../../modules/product/enums/receipt.enum.ts";
+import { ReceiptImportStatus } from "../../modules/receipt/enums/receipt.enum.ts";
 
 @singleton()
 export class ReceiptImportRepository {

@@ -17,7 +17,7 @@ export const productStatus = pgEnum(
 
 export const productTable = pgTable(DbTables.Products, {
   id: uuid("id").primaryKey().defaultRandom(),
-  productCode: text("product_code").unique(),
+  productCode: text("product_code").unique().notNull(),
   productName: text("product_name").notNull(),
   sellingPrice: customNumeric("selling_price").default(0),
   costPrice: customNumeric("cost_price").default(0),

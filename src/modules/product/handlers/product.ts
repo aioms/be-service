@@ -6,7 +6,9 @@ import * as XLSX from "xlsx";
 
 import { SupplierRepository } from "../../../database/repositories/supplier.repository.ts";
 import { ProductRepository } from "../../../database/repositories/product.repository.ts";
-import { ProductStatus } from "../enums/product.enum.ts";
+import { ReceiptItemRepository } from "../../../database/repositories/receipt-item.repository.ts";
+import { ProductInventoryLogRepository } from "../../../database/repositories/product-inventory-log.repository.ts";
+
 import {
   productTable,
   type InsertProduct,
@@ -17,6 +19,7 @@ import {
   productSupplierTable,
   type InsertProductSupplier,
 } from "../../../database/schemas/product-supplier.schema.ts";
+import { receiptItemTable } from "../../../database/schemas/receipt-item.schema.ts";
 
 import {
   getPagination,
@@ -24,12 +27,12 @@ import {
   parseBodyJson,
 } from "../../../common/utils/index.ts";
 import { generateProductCode } from "../utils/product.util.ts";
+import { generateSupplierCode } from "../../supplier/utils/supplier.util.ts";
 import type { ResponseType } from "../../../common/types/index.d.ts";
+
 import { database } from "../../../common/config/database.ts";
-import { SupplierStatus } from "../../supplier/enums/supplier.enum.ts";
-import { ReceiptItemRepository } from "../../../database/repositories/receipt-item.repository.ts";
-import { receiptItemTable } from "../../../database/schemas/receipt-item.schema.ts";
-import { ProductSupplier } from "../../../database/types/product.type.ts";
+import { ProductStatus } from "../enums/product.enum.ts";
+import { InventoryChangeType } from "../../../database/enums/inventory.enum.ts";
 
 @singleton()
 export default class ProductHandler {
@@ -37,7 +40,9 @@ export default class ProductHandler {
     @inject(ProductRepository) private productRepository: ProductRepository,
     @inject(SupplierRepository) private supplierRepository: SupplierRepository,
     @inject(ReceiptItemRepository)
-    private receiptItemRepository: ReceiptItemRepository
+    private receiptItemRepository: ReceiptItemRepository,
+    @inject(ProductInventoryLogRepository)
+    private productInventoryLogRepository: ProductInventoryLogRepository
   ) {}
 
   async createProduct(ctx: Context) {
@@ -113,6 +118,8 @@ export default class ProductHandler {
     const body = await parseBodyJson<
       UpdateProduct & { suppliers?: Array<{ id: string; costPrice: number }> }
     >(ctx);
+    const jwtPayload = ctx.get("jwtPayload");
+    const userId = jwtPayload.sub;
 
     const {
       productName,
@@ -126,7 +133,20 @@ export default class ProductHandler {
       warehouse,
       unit,
     } = body;
-    console.log({ body })
+
+    const { data: product } =
+      await this.productRepository.findProductByIdentity(
+        id,
+        {
+          select: {
+            id: productTable.id,
+            inventory: productTable.inventory,
+          },
+        },
+      );
+    if (!product) {
+      throw new Error("Product not found");
+    }
 
     const result = await database.transaction(async (tx) => {
       // Update product details
@@ -157,26 +177,42 @@ export default class ProductHandler {
         throw new Error("Can't update product");
       }
 
-      // if (suppliers !== undefined) {
-      //   // Delete existing relationships
-      //   await tx
-      //     .delete(productSupplierTable)
-      //     .where(eq(productSupplierTable.productId, id));
+      if (suppliers !== undefined) {
+        // Delete existing relationships
+        await tx
+          .delete(productSupplierTable)
+          .where(eq(productSupplierTable.productId, id));
 
-      //   // Insert new relationships
-      //   if (suppliers.length > 0) {
-      //     const productSuppliers: InsertProductSupplier[] = suppliers.map(
-      //       (supplier) => ({
-      //         productId: id,
-      //         supplierId: supplier.id,
-      //         costPrice: supplier.costPrice,
-      //         updatedAt: new Date().toISOString(),
-      //       })
-      //     );
+        // Insert new relationships
+        if (suppliers.length > 0) {
+          const productSuppliers: InsertProductSupplier[] = suppliers.map(
+            (supplier) => ({
+              productId: id,
+              supplierId: supplier.id,
+              costPrice: supplier.costPrice,
+              updatedAt: new Date().toISOString(),
+            })
+          );
 
-      //     await tx.insert(productSupplierTable).values(productSuppliers);
-      //   }
-      // }
+          await tx.insert(productSupplierTable).values(productSuppliers);
+        }
+      }
+
+      if (inventory !== undefined && inventory !== product.inventory) {
+        const inventoryChange = product.inventory - (inventory as number);
+
+        await this.productInventoryLogRepository.createLog(
+          {
+            productId: id,
+            changeType: InventoryChangeType.MANUAL,
+            previousInventory: product.inventory,
+            inventoryChange,
+            currentInventory: inventory as number,
+            userId,
+          },
+          tx
+        );
+      }
 
       return { id };
     });
@@ -473,7 +509,7 @@ export default class ProductHandler {
 
   async importProducts(ctx: Context) {
     try {
-      const query = ctx.req.query();
+      // const query = ctx.req.query();
       const body = await ctx.req.parseBody();
 
       if (body["file"] instanceof File) {
@@ -496,6 +532,7 @@ export default class ProductHandler {
             const sheetName = workbook.SheetNames[0];
             const sheet = workbook.Sheets[sheetName];
             const sheetData: any[] = XLSX.utils.sheet_to_json(sheet);
+            console.log({ SHEET_DATA_LENGTH: sheetData.length });
 
             const batchSize = 500;
             const batches: any[] = [];
@@ -513,27 +550,44 @@ export default class ProductHandler {
                   let productSuppliers: InsertProductSupplier[] = [];
 
                   if (suppliers) {
-                    const supplierNames = suppliers.split(";");
+                    // Split and get unique supplier names
+                    const supplierNames = [
+                      ...new Set(
+                        suppliers.split(";").map((name) => name.trim())
+                      ),
+                    ] as string[];
 
-                    const asyncTasks = supplierNames.map(async (name) => {
-                      const result = await this.supplierRepository.createSupplierOnConflictDoUpdate({
-                        name: name.trim(),
-                        status: SupplierStatus.COLLABORATING,
-                      }, tx)
+                    // First, collect all unique suppliers and create/update them in a single batch
+                    const uniqueSuppliers = new Map();
+                    for (const name of supplierNames) {
+                      if (!uniqueSuppliers.has(name)) {
+                        uniqueSuppliers.set(name, {
+                          code: generateSupplierCode(),
+                          name,
+                        });
+                      }
+                    }
 
-                      return {
-                        id: result[0].id,
-                        costPrice,
-                      };
-                    });
+                    // Create/update all suppliers at once
+                    const { data: newSuppliers } =
+                      await this.supplierRepository.createSupplierOnConflictDoUpdate(
+                        Array.from(uniqueSuppliers.values()),
+                        tx
+                      );
 
-                    const newSuppliers = await Promise.all(asyncTasks);
+                    // Map supplier names to their IDs for later use
+                    const supplierNameToId = new Map(
+                      newSuppliers.map((supplier, index) => [
+                        Array.from(uniqueSuppliers.keys())[index],
+                        supplier.id,
+                      ])
+                    );
 
-                    // Store suppliers for later use after product creation
-                    productSuppliers = newSuppliers.map((supplier) => ({
+                    // Now map the original supplier names to their IDs and cost prices
+                    productSuppliers = supplierNames.map((name) => ({
                       productId: "",
-                      supplierId: supplier.id,
-                      costPrice: supplier.costPrice,
+                      supplierId: supplierNameToId.get(name) as string,
+                      costPrice,
                     }));
                   }
 
@@ -558,20 +612,11 @@ export default class ProductHandler {
                 const productsAndSuppliers = await Promise.all(productsAsync);
 
                 // Insert products first
-                let createdProducts;
-                if (query.type === "2") {
-                  createdProducts =
-                    await this.productRepository.createProductOnConflictDoUpdate(
-                      productsAndSuppliers.map((item) => item.product),
-                      tx
-                    );
-                } else {
-                  createdProducts =
-                    await this.productRepository.createProductOnConflictDoNothing(
-                      productsAndSuppliers.map((item) => item.product),
-                      tx
-                    );
-                }
+                const createdProducts =
+                  await this.productRepository.createProductOnConflictDoNothing(
+                    productsAndSuppliers.map((item) => item.product),
+                    tx
+                  );
 
                 // Insert product-supplier relationships
                 const productSuppliersAsync = createdProducts.map(

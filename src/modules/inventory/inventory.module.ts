@@ -8,8 +8,13 @@ import { ReceiptImportRepository } from "../../database/repositories/receipt-imp
 import { ReceiptItemRepository } from "../../database/repositories/receipt-item.repository.ts";
 import { ReceiptReturnRepository } from "../../database/repositories/receipt-return.repository.ts";
 import { ProductInventoryLogRepository } from "../../database/repositories/product-inventory-log.repository.ts";
+import { InventoryRepository } from "../../database/repositories/inventory.repository.ts";
 
 @registry([
+  {
+    token: InventoryRepository,
+    useClass: InventoryRepository,
+  },
   {
     token: ProductRepository,
     useClass: ProductRepository,

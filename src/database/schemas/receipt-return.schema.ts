@@ -12,7 +12,7 @@ import { customNumeric } from "../custom/data-types.ts";
 import {
   ReceiptReturnStatus,
   ReceiptReturnType,
-} from "../../modules/product/enums/receipt.enum.ts";
+} from "../../modules/receipt/enums/receipt.enum.ts";
 import { supplierTable } from "./supplier.schema.ts";
 
 export const receiptReturnStatus = pgEnum(

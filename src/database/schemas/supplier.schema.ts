@@ -19,8 +19,8 @@ export const supplierTable = pgTable(
   DbTables.Suppliers,
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    code: text("code").unique(),
-    name: text("name").unique(),
+    code: text("code").unique().notNull(),
+    name: text("name").unique().notNull(),
     email: text("email"),
     phone: text("phone"),
     company: text("company"),

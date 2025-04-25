@@ -14,7 +14,7 @@ import {
 } from "../schemas/receipt-return.schema.ts";
 import { supplierTable } from "../schemas/supplier.schema.ts";
 import { PgTx } from "../custom/data-types.ts";
-import { ReceiptReturnStatus } from "../../modules/product/enums/receipt.enum.ts";
+import { ReceiptReturnStatus } from "../../modules/receipt/enums/receipt.enum.ts";
 
 @singleton()
 export class ReceiptReturnRepository {

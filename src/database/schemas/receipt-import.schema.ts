@@ -9,7 +9,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { DbTables } from "../../common/config/index.ts";
 import { customNumeric } from "../custom/data-types.ts";
-import { ReceiptImportStatus } from "../../modules/product/enums/receipt.enum.ts";
+import { ReceiptImportStatus } from "../../modules/receipt/enums/receipt.enum.ts";
 import { supplierTable } from "./supplier.schema.ts";
 
 export const receiptImportStatus = pgEnum(

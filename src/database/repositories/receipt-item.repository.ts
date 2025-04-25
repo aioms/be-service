@@ -17,7 +17,7 @@ import { receiptImportTable } from "../schemas/receipt-import.schema.ts";
 import { receiptReturnTable } from "../schemas/receipt-return.schema.ts";
 import { receiptCheckTable } from "../schemas/receipt-check.schema.ts";
 
-import { ReceiptImportStatus } from "../../modules/product/enums/receipt.enum.ts";
+import { ReceiptImportStatus } from "../../modules/receipt/enums/receipt.enum.ts";
 
 @singleton()
 export class ReceiptItemRepository {
@@ -29,7 +29,11 @@ export class ReceiptItemRepository {
     const result = await db
       .insert(receiptItemTable)
       .values(data)
-      .returning({ id: receiptItemTable.id });
+      .returning({
+        id: receiptItemTable.id,
+        inventory: receiptItemTable.inventory,
+        quantity: receiptItemTable.quantity,
+      });
     return { data: result, error: null };
   }
 

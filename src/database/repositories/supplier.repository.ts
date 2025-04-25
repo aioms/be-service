@@ -28,7 +28,7 @@ export class SupplierRepository {
 
   async updateSupplier(
     opts: RepositoryOptionUpdate<UpdateSupplier>,
-    tx?: PgTx,
+    tx?: PgTx
   ) {
     const db = tx || database;
     const filters: SQL[] = [...opts.where];
@@ -54,7 +54,7 @@ export class SupplierRepository {
 
   async findSupplierByName(
     name: string,
-    opts: Pick<RepositoryOption, "select">,
+    opts: Pick<RepositoryOption, "select">
   ): Promise<RepositoryResult> {
     const query = database
       .selectDistinct(opts.select)
@@ -67,7 +67,7 @@ export class SupplierRepository {
 
   async findSupplierById(
     id: SelectSupplier["id"],
-    opts: Pick<RepositoryOption, "select">,
+    opts: Pick<RepositoryOption, "select">
   ): Promise<RepositoryResult> {
     const query = database
       .selectDistinct(opts.select)
@@ -79,7 +79,7 @@ export class SupplierRepository {
   }
 
   async findSuppliersByCondition(
-    opts: RepositoryOption,
+    opts: RepositoryOption
   ): Promise<RepositoryResult> {
     let count: number | null = null;
     const filters: SQL[] = [...opts.where];
@@ -111,36 +111,34 @@ export class SupplierRepository {
     return { data: results, error: null, count };
   }
 
-  createSupplierOnConflictDoNothing(data: InsertSupplier, tx?: PgTx) {
+  async createSupplierOnConflictDoNothing(data: InsertSupplier, tx?: PgTx) {
     const db = tx || database;
-    return db
+    const query = db
       .insert(supplierTable)
       .values(data)
       .returning({ id: supplierTable.id })
       .onConflictDoNothing({
-        target: supplierTable.name, // Using single unique constraint
+        target: supplierTable.name,
       });
+
+    const result = await query.execute();
+    return { data: result, error: null };
   }
 
-  createSupplierOnConflictDoUpdate(data: InsertSupplier, tx?: PgTx) {
+  async createSupplierOnConflictDoUpdate(data: InsertSupplier[], tx?: PgTx) {
     const db = tx || database;
-    return db
+    const query = db
       .insert(supplierTable)
       .values(data)
       .onConflictDoUpdate({
-        target: supplierTable.name, // Using single unique constraint
+        target: supplierTable.name,
         set: {
-          email: sql`EXCLUDED.email`,
-          phone: sql`EXCLUDED.phone`,
-          address: sql`EXCLUDED.address`,
-          company: sql`EXCLUDED.company`,
-          taxCode: sql`EXCLUDED.tax_code`,
-          note: sql`EXCLUDED.note`,
-          totalDebt: sql`EXCLUDED.total_debt`,
-          totalPurchased: sql`EXCLUDED.total_purchased`,
-          status: sql`EXCLUDED.status`,
+          updatedAt: sql`EXCLUDED.updated_at`,
         },
       })
       .returning({ id: supplierTable.id });
+
+    const result = await query.execute();
+    return { data: result, error: null };
   }
 }

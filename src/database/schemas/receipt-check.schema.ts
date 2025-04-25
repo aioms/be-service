@@ -7,7 +7,7 @@ import {
   jsonb,
 } from "drizzle-orm/pg-core";
 import { DbTables } from "../../common/config/index.ts";
-import { ReceiptCheckStatus } from "../../modules/product/enums/receipt.enum.ts";
+import { ReceiptCheckStatus } from "../../modules/receipt/enums/receipt.enum.ts";
 import { userTable } from "./user.schema.ts";
 import { supplierTable } from "./supplier.schema.ts";
 

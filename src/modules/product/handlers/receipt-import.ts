@@ -73,7 +73,7 @@ export default class ReceiptImportHandler {
       };
       const { data } = await this.receiptRepository.createReceiptImport(
         receiptImportData,
-        tx,
+        tx
       );
 
       if (!data.length) {
@@ -142,7 +142,7 @@ export default class ReceiptImportHandler {
           set: dataUpdate,
           where: [eq(receiptImportTable.id, id)],
         },
-        tx,
+        tx
       );
 
       if (!data.length) {
@@ -160,7 +160,10 @@ export default class ReceiptImportHandler {
         }));
 
         // return ids[]
-        this.receiptItemRepository.createReceiptItem(receiptItemsData, tx);
+        await this.receiptItemRepository.createReceiptItem(
+          receiptItemsData,
+          tx
+        );
       }
     });
 
@@ -255,7 +258,7 @@ export default class ReceiptImportHandler {
             id: receiptImportTable.id,
             receiptNumber: receiptImportTable.receiptNumber,
           },
-        },
+        }
       );
 
     if (!receipt) {
@@ -294,8 +297,8 @@ export default class ReceiptImportHandler {
       filters.push(
         or(
           ilike(receiptImportTable.receiptNumber, `%${keyword}%`),
-          ilike(receiptImportTable.supplier, `%${keyword}%`),
-        ),
+          ilike(receiptImportTable.supplier, `%${keyword}%`)
+        )
       );
     }
 
