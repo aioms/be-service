@@ -20,7 +20,7 @@ const config = {
   authApiKey: Deno.env.get("AUTH_API_KEY"),
   databaseUrl: Deno.env.get("DATABASE_URL"),
   // sentryDsn: Deno.env.get("SENTRY_DSN"),
-  retryMaxAttempts: Deno.env.get("RETRY_MAX_ATTEMPTS"),
+  // retryMaxAttempts: Deno.env.get("RETRY_MAX_ATTEMPTS"),
 };
 
 // Validate the configuration
@@ -28,7 +28,7 @@ const parsedConfig = configSchema.safeParse(config);
 
 if (!parsedConfig.success) {
   console.error("Invalid env:", parsedConfig.error.format());
-  throw new Error("Invalid env");
+  throw new Error(`Invalid env: ${parsedConfig.error.format()}`);
 }
 
 export const DbTables = Object.freeze({
