@@ -1,5 +1,5 @@
 import { SQL } from "drizzle-orm";
-import { Role } from "../enums/index.ts";
+import { UserRole } from "../../database/enums/user.enum.ts";
 
 declare module "hono" {
   interface ContextVariableMap {
@@ -10,7 +10,7 @@ declare module "hono" {
 export interface UserInfo {
   id: string;
   fullname: string;
-  role: Role;
+  role: UserRole;
 }
 
 export interface User {
@@ -33,6 +33,7 @@ export interface RepositoryOption {
   limit?: number;
   offset?: number;
   isCount?: boolean;
+  withSuppliers?: boolean;
 }
 
 export interface RepositoryOptionUpdate<T> {

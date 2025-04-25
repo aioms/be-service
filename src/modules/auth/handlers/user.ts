@@ -4,6 +4,7 @@ import { Context } from "hono";
 import { nanoid } from "nanoid";
 import dayjs from "dayjs";
 import bcrypt from "bcryptjs";
+import { customAlphabet } from "nanoid";
 
 import {
   getPagination,
@@ -13,6 +14,7 @@ import {
 import { CreateUserDto, UpdateUserDto } from "../dtos/user.dto.ts";
 import { UserRepository } from "../../../database/repositories/user.repository.ts";
 import { userTable } from "../../../database/schemas/user.schema.ts";
+import { UserStatus } from "../../../database/enums/user.enum.ts";
 
 @singleton()
 export default class UserHandler {
@@ -22,18 +24,13 @@ export default class UserHandler {
     const body = await parseBodyJson<CreateUserDto>(ctx);
     const { username, password, fullname, phone, role, storeCode, status } =
       body;
-    console.log({ body });
 
     const salt = bcrypt.genSaltSync(10);
     const hashedPassword = bcrypt.hashSync(password, salt);
-
-    // const { data: userRole } = await this.userRepository.findRoleByName(role);
-    //
-    // if (!userRole) {
-    //   throw new Error("Can't find role");
-    // }
+    const code = customAlphabet("1234567890", 3)();
 
     const { data: newUser } = await this.userRepository.createUser({
+      code,
       fullname,
       phone,
       storeCode,
@@ -48,13 +45,8 @@ export default class UserHandler {
       throw new Error("Can't create user");
     }
 
-    // await this.userRepository.createUserRole({
-    //   userId: newUser[0].id,
-    //   roleId: userRole.id,
-    // });
-
     return ctx.json({
-      data: { id: newUser[0].id },
+      data: { id: newUser[0].id, code },
       success: true,
       statusCode: 201,
     });
@@ -81,22 +73,6 @@ export default class UserHandler {
       dataUpdate.salt = salt;
       dataUpdate.tokenVersion = nanoid();
     }
-
-    // if (role) {
-    //   const { data: userRole } = await this.userRepository.findRoleByName(role);
-    //
-    //   if (!userRole) {
-    //     throw new Error("Can't find role");
-    //   }
-    //
-    //   await Promise.all([
-    //     this.userRepository.deleteUserRoles(id),
-    //     this.userRepository.createUserRole({
-    //       userId: id,
-    //       roleId: userRole.id,
-    //     }),
-    //   ]);
-    // }
 
     const { data: userUpdated } = await this.userRepository.updateUser({
       set: dataUpdate,
@@ -127,12 +103,14 @@ export default class UserHandler {
     }
 
     const now = dayjs().toISOString();
-    const username = `${user.username}__deleted__${now}`;
+    const dataUpdate = {
+      deletedAt: now,
+      status: UserStatus.DELETED,
+      username: `${user.username}__deleted__${now}`,
+    }
+
     const { data: deletedUsers } = await this.userRepository.updateUser({
-      set: {
-        username: username,
-        deletedAt: now,
-      },
+      set: dataUpdate,
       where: [eq(userTable.id, id)],
     });
     if (!deletedUsers.length) {
@@ -151,6 +129,7 @@ export default class UserHandler {
     const { data: user } = await this.userRepository.findUserById(userId, {
       select: {
         id: userTable.id,
+        code: userTable.code,
         username: userTable.username,
         fullname: userTable.fullname,
         phone: userTable.phone,
@@ -180,6 +159,7 @@ export default class UserHandler {
         or(
           ilike(userTable.fullname, `%${keyword}%`),
           ilike(userTable.phone, `%${keyword}%`),
+          ilike(userTable.code, `%${keyword}%`),
         ),
       );
     }

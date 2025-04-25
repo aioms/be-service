@@ -4,10 +4,10 @@ export enum Environment {
   PRODUCTION = "production",
 }
 
-export enum Role {
-  SUPERVISOR = "supervisor",
-  ADMIN = "admin",
-  USER = "user",
+export enum StoreCode {
+  KS1 = "KS1",
+  KS2 = "KS2",
+  KH = "KH",
 }
 
 export enum CacheExpiry {

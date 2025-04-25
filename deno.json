@@ -5,13 +5,12 @@
     "test": "deno test --allow-net --allow-env --unstable",
     "init": "deno install --node-modules-dir",
     "studio": "deno run -A npm:drizzle-kit studio",
-    "gen:migrations": "deno run -A npm:drizzle-kit generate",
-    "run:migrations": "deno run -A npm:drizzle-kit migrate",
-    "db:push": "deno --env -A --node-modules-dir npm:drizzle-kit push",
-    "db:migrate": "deno --env -A --node-modules-dir npm:drizzle-kit migrate",
-    "db:generate": "deno --env -A --node-modules-dir npm:drizzle-kit generate",
+    "db:push": "deno --env -A --node-modules-dir npm:drizzle-kit push --config=drizzle-dev.config.ts",
+    "db:generate": "deno --env -A --node-modules-dir npm:drizzle-kit generate --config=drizzle-dev.config.ts",
+    "db:migrate": "deno --env -A --node-modules-dir npm:drizzle-kit migrate --config=drizzle-dev.config.ts",
     "db:seed": "deno run --env -A src/database/seeds/init.ts",
-    "db:check": "deno run -A npm:drizzle-kit check"
+    "db:reset": "deno run --env -A src/database/seeds/reset.ts",
+    "db:check": "deno run -A npm:drizzle-kit check --config=drizzle-dev.config.ts"
   },
   "compilerOptions": {
     "jsx": "precompile",
@@ -29,11 +28,11 @@
     "drizzle-orm": "npm:drizzle-orm@^0.38.3",
     "drizzle-seed": "npm:drizzle-seed@^0.1.2",
     "hono": "npm:hono@^4.6.5",
-    "nanoid": "npm:nanoid@^5.0.7",
     "postgres": "npm:postgres@^3.4.4",
     "reflect-metadata": "npm:reflect-metadata@^0.2.2",
     "tsyringe": "npm:tsyringe@^4.8.0",
     "xlsx": "npm:xlsx@^0.18.5",
-    "zod": "npm:zod@^3.24.1"
+    "zod": "npm:zod@^3.24.1",
+    "nanoid": "npm:nanoid@^5.0.9"
   }
 }

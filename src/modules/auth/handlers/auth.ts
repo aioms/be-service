@@ -16,15 +16,17 @@ export default class LoginHandler {
 
   async loginWithPassword(ctx: Context) {
     const body = await parseBodyJson<LoginDto>(ctx);
-    console.log({ body });
 
     const user = await this.authRepository.findUserByUsername(body.username, {
       select: {
         id: userTable.id,
+        code: userTable.code,
+        fullname: userTable.fullname,
         username: userTable.username,
         password: userTable.password,
         salt: userTable.salt,
         role: userTable.role,
+        storeCode: userTable.storeCode,
       },
     });
 
@@ -46,20 +48,18 @@ export default class LoginHandler {
       });
     }
 
-    // const roles = await this.authRepository.findRolesOfUser(user.id);
-    // const roleIds = roles.map((r) => r.roleId);
-
     const tokenVersion = nanoid(5);
-    const roles = [user.role];
+    const { id, username, fullname, role, storeCode } = user;
     const payload = {
       v: tokenVersion,
-      sub: user.id,
-      roles,
+      sub: id,
+      fullname,
+      role,
     };
 
     const [token] = await Promise.all([
       sign(payload, config!.authJwtSecret),
-      this.authRepository.updateTokenVersion(user.id, tokenVersion),
+      this.authRepository.updateTokenVersion(id, tokenVersion),
     ]);
 
     return ctx.json({
@@ -67,11 +67,11 @@ export default class LoginHandler {
       data: {
         token,
         user: {
-          id: user.id,
-          username: user.username,
-          fullname: user.fullname,
-          roles,
-          storeCode: user.storeCode,
+          id,
+          username,
+          fullname,
+          role,
+          storeCode,
         },
       },
     });

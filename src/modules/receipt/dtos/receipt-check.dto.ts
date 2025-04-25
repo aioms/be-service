@@ -22,3 +22,10 @@ export interface UpdateReceiptCheckRequestDto {
   status: ReceiptCheckStatus;
   items: UpdateReceiptItemRequestDto[];
 }
+
+export interface UpdateBalanceReceiptRequestDto {
+  items: Array<{
+    productId: string;
+    actualInventory: number;
+  }>;
+}

@@ -26,10 +26,6 @@ export default class ProductController {
       this.productHandler.getCategories(c),
     );
 
-    route.get("/suppliers", authenticate, (c) =>
-      this.productHandler.getSuppliers(c),
-    );
-
     route.get("/units", authenticate, (c) => this.productHandler.getUnits(c));
 
     /**
@@ -47,16 +43,24 @@ export default class ProductController {
       this.productHandler.deleteProduct(c),
     );
 
+    route.post("/products/import", authenticate, (c) =>
+      this.productHandler.importProducts(c),
+    );
+
+    route.get("/products/total", authenticate, (c) =>
+      this.productHandler.getTotalProductAndInventory(c),
+    );
+
+    route.get("/products/history", authenticate, (c) =>
+      this.productHandler.getReceiptHistoryOfProduct(c),
+    );
+
     route.get("/products/:id", authenticate, (c) =>
       this.productHandler.getProductById(c),
     );
 
     route.get("/products", authenticate, (c) =>
       this.productHandler.getProductsByFilter(c),
-    );
-
-    route.post("/products/import", authenticate, (c) =>
-      this.productHandler.importProducts(c),
     );
 
     /**
@@ -97,8 +101,10 @@ export default class ProductController {
       this.receiptImportHandler.getReceiptsByFilter(c),
     );
 
-    route.get("/receipt-imports/receipt-items/:receiptNumber", authenticate, (c) =>
-      this.receiptImportHandler.getReceiptItemsByBarcode(c),
+    route.get(
+      "/receipt-imports/receipt-items/:receiptNumber",
+      authenticate,
+      (c) => this.receiptImportHandler.getReceiptItemsByBarcode(c),
     );
 
     /**
@@ -124,8 +130,10 @@ export default class ProductController {
       this.receiptReturnHandler.getReceiptsByFilter(c),
     );
 
-    route.get("/receipt-return/receipt-items/:receiptNumber", authenticate, (c) =>
-      this.receiptReturnHandler.getReceiptItemsByBarcode(c),
+    route.get(
+      "/receipt-return/receipt-items/:receiptNumber",
+      authenticate,
+      (c) => this.receiptReturnHandler.getReceiptItemsByBarcode(c),
     );
 
     app.route(this.path, route);

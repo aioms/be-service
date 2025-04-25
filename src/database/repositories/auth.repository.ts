@@ -1,10 +1,11 @@
 import { eq, and, sql, SQL, isNull } from "drizzle-orm";
 import { singleton } from "tsyringe";
+
 import { database } from "../../common/config/database.ts";
+import { PgTx } from "../custom/data-types.ts";
+import { UserStatus } from "../enums/user.enum.ts";
+
 import { SelectUser, userTable } from "../schemas/user.schema.ts";
-import { UserStatus } from "../../modules/auth/enums/user.enum.ts";
-import { SelectUserRole, userRoleTable } from "../schemas/user-role.schema.ts";
-import { roleTable } from "../schemas/role.schema.ts";
 
 interface OptionBase {
   select: Record<string, any>;
@@ -23,31 +24,20 @@ export class AuthRepository {
       .selectDistinct(opts.select)
       .from(userTable)
       .where(
-        sql`${userTable.username} = ${username} AND ${userTable.status} = ${UserStatus.active} AND ${userTable.deletedAt} IS NULL`,
+        sql`${userTable.username} = ${username} AND ${userTable.status} = ${UserStatus.ACTIVE} AND ${userTable.deletedAt} IS NULL`,
       );
 
     const [result] = await query.execute();
     return result;
   }
 
-  async findRolesOfUser(
-    id: SelectUserRole["userId"],
-  ): Promise<Record<string, any>[] | []> {
-    const query = database
-      .select()
-      .from(userRoleTable)
-      .innerJoin(roleTable, eq(userRoleTable.roleId, roleTable.id))
-      .where(eq(userRoleTable.userId, id));
-
-    const results = await query.execute();
-    return results;
-  }
-
   updateTokenVersion(
     id: SelectUser["id"],
     tokenVersion: SelectUser["tokenVersion"],
+    tx?: PgTx,
   ) {
-    return database
+    const db = tx || database;
+    return db
       .update(userTable)
       .set({
         tokenVersion,
