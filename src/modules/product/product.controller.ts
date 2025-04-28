@@ -93,6 +93,10 @@ export default class ProductController {
       this.receiptImportHandler.deleteReceipt(c),
     );
 
+    route.get("/receipt-imports/total", authenticate, (c) =>
+      this.receiptImportHandler.getTotalImportsByDateRange(c)
+    );
+
     route.get("/receipt-imports/:id", authenticate, (c) =>
       this.receiptImportHandler.getReceiptById(c),
     );

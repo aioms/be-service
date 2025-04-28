@@ -28,6 +28,9 @@ import {
   parseBodyJson,
 } from "../../../common/utils/index.ts";
 import { database } from "../../../common/config/database.ts";
+import { UserActivityRepository } from "../../../database/repositories/user-activity.repository.ts";
+import { PgTx } from "../../../database/custom/data-types.ts";
+import { UserActivityType } from "../../../database/enums/user-activity.enum.ts";
 
 @singleton()
 export default class ReceiptImportHandler {
@@ -36,6 +39,8 @@ export default class ReceiptImportHandler {
     private receiptRepository: ReceiptImportRepository,
     @inject(ReceiptItemRepository)
     private receiptItemRepository: ReceiptItemRepository,
+    @inject(UserActivityRepository)
+    private userActivityRepository: UserActivityRepository
   ) {}
 
   async createReceipt(ctx: Context) {
@@ -71,23 +76,28 @@ export default class ReceiptImportHandler {
         status,
         userCreated: userId,
       };
-      const { data } = await this.receiptRepository.createReceiptImport(
+      const { data, error } = await this.receiptRepository.createReceiptImport(
         receiptImportData,
         tx
       );
 
-      if (!data.length) {
-        throw new Error("Can't create receipt");
+      if (error || !data) {
+        throw new Error(error);
       }
 
-      const receiptId = data[0].id;
-
       // Create receipt items
-      const receiptItemsData = items.map((item) => ({
-        ...item,
-        receiptId,
-      }));
-      await this.receiptItemRepository.createReceiptItem(receiptItemsData, tx);
+      const receiptId = data.id;
+      await this.createReceiptItems(receiptId, items, tx);
+
+      await this.userActivityRepository.createActivity(
+        {
+          userId: userId,
+          description: `Vừa tạo 1 phiếu nhập ${receiptNumber}`,
+          type: UserActivityType.RECEIPT_IMPORT_CREATED,
+          referenceId: receiptId,
+        },
+        tx
+      );
 
       return receiptId;
     });
@@ -351,5 +361,43 @@ export default class ReceiptImportHandler {
       success: true,
       statusCode: 200,
     });
+  }
+
+  async getTotalImportsByDateRange(ctx: Context) {
+    const query = ctx.req.query();
+    const { startDate, endDate } = query;
+
+    const total = await this.receiptRepository.getTotalImportsByDateRange(
+      startDate,
+      endDate
+    );
+
+    return ctx.json({
+      data: total,
+      success: true,
+      statusCode: 200,
+    });
+  }
+
+  /**
+   * Private methods
+   */
+
+  private async createReceiptItems(
+    receiptId: string,
+    items: Array<{
+      productId: string;
+      productCode: string;
+      productName: string;
+      quantity: number;
+      costPrice: number;
+    }>,
+    tx: PgTx
+  ): Promise<void> {
+    const receiptItemsData = items.map((item) => ({
+      ...item,
+      receiptId,
+    }));
+    await this.receiptItemRepository.createReceiptItem(receiptItemsData, tx);
   }
 }

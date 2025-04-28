@@ -13,6 +13,7 @@
     "npm:drizzle-orm@~0.38.3": "0.38.3_postgres@3.4.4",
     "npm:drizzle-seed@~0.1.2": "0.1.3_drizzle-orm@0.38.3__postgres@3.4.4_postgres@3.4.4",
     "npm:hono@^4.6.5": "4.6.5",
+    "npm:lodash@^4.17.21": "4.17.21",
     "npm:nanoid@^5.0.9": "5.0.9",
     "npm:postgres@^3.4.4": "3.4.4",
     "npm:reflect-metadata@~0.2.2": "0.2.2",
@@ -326,6 +327,9 @@
     },
     "hono@4.6.5": {
       "integrity": "sha512-qsmN3V5fgtwdKARGLgwwHvcdLKursMd+YOt69eGpl1dUCJb8mCd7hZfyZnBYjxCegBG7qkJRQRUy2oO25yHcyQ=="
+    },
+    "lodash@4.17.21": {
+      "integrity": "sha512-v2kDEe57lecTulaDIuNTPy3Ry4gLGJ6Z1O3vE1krgXZNrsQ+LFTGHVxVjcXPs17LhbZVGedAJv8XZ1tvj5FvSg=="
     },
     "ms@2.1.3": {
       "integrity": "sha512-6FlzubTLZG3J2a/NVCAleEhjzq5oxgHyaCU9yYXvcLsvoVaHJq/s5xXI6/XXP6tz7R9xAOtHnSO/tXtF3WRTlA=="

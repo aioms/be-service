@@ -29,7 +29,12 @@ export class ReceiptCheckRepository {
       .insert(receiptCheckTable)
       .values(data)
       .returning({ id: receiptCheckTable.id });
-    return { data: result, error: null };
+
+    if (!result.length) {
+      return { data: null, error: "Can't create receipt check" };
+    }
+
+    return { data: result[0], error: null };
   }
 
   async updateReceiptCheck(opts: RepositoryOptionUpdate<UpdateReceiptCheck>, tx?: PgTx) {

@@ -7,6 +7,7 @@ import dayjs from "dayjs";
 import { ReceiptCheckRepository } from "../../../database/repositories/receipt-check.repository.ts";
 import { ReceiptItemRepository } from "../../../database/repositories/receipt-item.repository.ts";
 import { ProductRepository } from "../../../database/repositories/product.repository.ts";
+import { UserActivityRepository } from "../../../database/repositories/user-activity.repository.ts";
 
 // SCHEMA
 import {
@@ -19,6 +20,7 @@ import {
 import { receiptItemTable } from "../../../database/schemas/receipt-item.schema.ts";
 import { supplierTable } from "../../../database/schemas/supplier.schema.ts";
 import { productTable } from "../../../database/schemas/product.schema.ts";
+import { userTable } from "../../../database/schemas/user.schema.ts";
 
 // DTO
 import {
@@ -33,10 +35,12 @@ import {
   getPaginationMetadata,
   parseBodyJson,
 } from "../../../common/utils/index.ts";
-import { database } from "../../../common/config/database.ts";
-import { ReceiptCheckStatus } from "../enums/receipt.enum.ts";
-import { userTable } from "../../../database/schemas/user.schema.ts";
 import { increment } from "../../../database/custom/helpers.ts";
+import { database } from "../../../common/config/database.ts";
+
+import { ReceiptCheckStatus } from "../enums/receipt.enum.ts";
+import { UserActivityType } from "../../../database/enums/user-activity.enum.ts";
+import { PgTx } from "../../../database/custom/data-types.ts";
 
 @singleton()
 export default class ReceiptCheckHandler {
@@ -47,6 +51,8 @@ export default class ReceiptCheckHandler {
     private receiptItemRepository: ReceiptItemRepository,
     @inject(ProductRepository)
     private productRepository: ProductRepository,
+    @inject(UserActivityRepository)
+    private userActivityRepository: UserActivityRepository
   ) {}
 
   async createReceipt(ctx: Context) {
@@ -68,23 +74,29 @@ export default class ReceiptCheckHandler {
         checker,
         userCreated: userId,
       };
-      const { data } = await this.receiptRepository.createReceiptCheck(
+      const { data, error } = await this.receiptRepository.createReceiptCheck(
         receiptImportData,
-        tx,
+        tx
       );
 
-      if (!data.length) {
-        throw new Error("Can't create receipt");
+      if (error || !data) {
+        throw new Error(error);
       }
 
-      const receiptId = data[0].id;
-
       // Create receipt items
-      const receiptItemsData = items.map((item) => ({
-        ...item,
-        receiptId,
-      }));
-      await this.receiptItemRepository.createReceiptItem(receiptItemsData, tx);
+      const receiptId = data.id;
+      await this.createReceiptItems(receiptId, items, tx);
+
+      // Create user activity
+      await this.userActivityRepository.createActivity(
+        {
+          userId: userId,
+          description: `Vừa tạo 1 phiếu kiểm ${receiptNumber}`,
+          type: UserActivityType.RECEIPT_CHECK_CREATED,
+          referenceId: receiptId,
+        },
+        tx
+      );
 
       return receiptId;
     });
@@ -100,7 +112,7 @@ export default class ReceiptCheckHandler {
     changeLog: Array<ChangeLog> = [],
     oldStatus: ReceiptCheckStatus,
     newStatus: ReceiptCheckStatus,
-    user: string,
+    user: string
   ) {
     changeLog.push({
       user,
@@ -114,7 +126,7 @@ export default class ReceiptCheckHandler {
   updateActivityLog(
     oldActivities: ActivityLog[],
     dataUpdate: UpdateReceiptCheck,
-    user: string,
+    user: string
   ): ActivityLog[] {
     const newActivities = [
       ...(Array.isArray(oldActivities) ? oldActivities : []),
@@ -189,7 +201,7 @@ export default class ReceiptCheckHandler {
         receipt.changeLog,
         receipt.status,
         ReceiptCheckStatus.BALANCELLED,
-        fullname,
+        fullname
       );
       dataUpdate.changeLog = newChangeLog;
 
@@ -197,7 +209,7 @@ export default class ReceiptCheckHandler {
       dataUpdate.activityLog = this.updateActivityLog(
         receipt.activityLog,
         { status: ReceiptCheckStatus.BALANCELLED },
-        fullname,
+        fullname
       );
 
       const { data: resultUpdateReceipt } =
@@ -206,7 +218,7 @@ export default class ReceiptCheckHandler {
             set: dataUpdate,
             where: [eq(receiptCheckTable.id, id)],
           },
-          tx,
+          tx
         );
 
       if (!resultUpdateReceipt.length) {
@@ -222,7 +234,7 @@ export default class ReceiptCheckHandler {
               updatedAt: dayjs().toISOString(),
             },
           },
-          tx,
+          tx
         );
       });
 
@@ -270,7 +282,7 @@ export default class ReceiptCheckHandler {
           receipt.changeLog,
           receipt.status,
           newReceiptCheckData.status,
-          fullname,
+          fullname
         );
         dataUpdate.changeLog = newChangeLog;
       }
@@ -280,7 +292,7 @@ export default class ReceiptCheckHandler {
         dataUpdate.activityLog = this.updateActivityLog(
           receipt.activityLog,
           newReceiptCheckData,
-          fullname,
+          fullname
         );
       }
 
@@ -289,7 +301,7 @@ export default class ReceiptCheckHandler {
           set: dataUpdate,
           where: [eq(receiptCheckTable.id, id)],
         },
-        tx,
+        tx
       );
 
       if (!data.length) {
@@ -362,7 +374,7 @@ export default class ReceiptCheckHandler {
           activityLog: receiptCheckTable.activityLog,
           createdAt: receiptCheckTable.createdAt,
         },
-      },
+      }
     );
 
     if (!receipt) {
@@ -381,7 +393,7 @@ export default class ReceiptCheckHandler {
           systemInventory: sum(receiptItemTable.inventory).mapWith(Number),
           actualInventory:
             sql<number>`COALESCE(SUM(${receiptItemTable.actualInventory}), 0)`.mapWith(
-              Number,
+              Number
             ),
         },
         where: [eq(receiptItemTable.receiptId, receiptId)],
@@ -408,7 +420,7 @@ export default class ReceiptCheckHandler {
             id: receiptCheckTable.id,
             receiptNumber: receiptCheckTable.receiptNumber,
           },
-        },
+        }
       );
 
     if (!receipt) {
@@ -448,8 +460,8 @@ export default class ReceiptCheckHandler {
       filters.push(
         or(
           ilike(receiptCheckTable.receiptNumber, `%${keyword}%`),
-          ilike(receiptCheckTable.note, `%${keyword}%`),
-        ),
+          ilike(receiptCheckTable.note, `%${keyword}%`)
+        )
       );
     }
 
@@ -491,15 +503,15 @@ export default class ReceiptCheckHandler {
           systemInventory: sum(receiptItemTable.inventory).mapWith(Number),
           actualInventory:
             sql<number>`COALESCE(SUM(${receiptItemTable.actualInventory}), 0)`.mapWith(
-              Number,
+              Number
             ),
           totalDifference:
             sql<number>`COALESCE(SUM(${receiptItemTable.actualInventory} - ${receiptItemTable.inventory}), 0)`.mapWith(
-              Number,
+              Number
             ),
           totalValueDifference:
             sql<number>`COALESCE(SUM((${receiptItemTable.actualInventory} - ${receiptItemTable.inventory}) * ${receiptItemTable.costPrice}), 0)`.mapWith(
-              Number,
+              Number
             ),
           date: receiptCheckTable.date,
           status: receiptCheckTable.status,
@@ -528,7 +540,7 @@ export default class ReceiptCheckHandler {
               systemInventory: sum(receiptItemTable.inventory).mapWith(Number),
               actualInventory:
                 sql<number>`COALESCE(SUM(${receiptItemTable.actualInventory}), 0)`.mapWith(
-                  Number,
+                  Number
                 ),
             },
             where: [eq(receiptItemTable.receiptId, receipt.id)],
@@ -572,5 +584,27 @@ export default class ReceiptCheckHandler {
       success: true,
       statusCode: 200,
     });
+  }
+
+  /**
+   * Private methods
+   */
+
+  private async createReceiptItems(
+    receiptId: string,
+    items: Array<{
+      productId: string;
+      productCode: string;
+      productName: string;
+      quantity: number;
+      costPrice: number;
+    }>,
+    tx: PgTx
+  ): Promise<void> {
+    const receiptItemsData = items.map((item) => ({
+      ...item,
+      receiptId,
+    }));
+    await this.receiptItemRepository.createReceiptItem(receiptItemsData, tx);
   }
 }

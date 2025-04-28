@@ -29,7 +29,12 @@ export class ReceiptImportRepository {
       .insert(receiptImportTable)
       .values(data)
       .returning({ id: receiptImportTable.id });
-    return { data: result, error: null };
+
+    if (!result.length) {
+      return { data: null, error: "Can't create receipt import" };
+    }
+
+    return { data: result[0], error: null };
   }
 
   async updateReceiptImport(
@@ -145,19 +150,18 @@ export class ReceiptImportRepository {
     return +(count[0].value || 0);
   }
 
-  async getTotalImportsByDateRange(
-    startDate: string,
-    endDate: string
-  ): Promise<{ x: string; y: number }[]> {
-    // Ensure dates are in correct format
-    const start = new Date(startDate);
-    const end = new Date(endDate);
+  async getTotalImportsByDateRange(startDate?: string, endDate?: string) {
+    const start = startDate
+      ? new Date(startDate)
+      : new Date(new Date().setHours(0, 0, 0, 0));
 
-    // Get all imports within date range
-    const results = await database
+    const end = endDate
+      ? new Date(endDate)
+      : new Date(new Date().setHours(23, 59, 59, 999));
+
+    const result = await database
       .select({
-        date: sql<string>`DATE(${receiptImportTable.createdAt})`,
-        total: sql<number>`COALESCE(SUM(${receiptImportTable.totalProduct}), 0)`,
+        count: sql<number>`COUNT(*)`,
       })
       .from(receiptImportTable)
       .where(
@@ -171,25 +175,12 @@ export class ReceiptImportRepository {
           eq(receiptImportTable.status, ReceiptImportStatus.COMPLETED)
         )
       )
-      .groupBy(sql`DATE(${receiptImportTable.createdAt})`)
-      .orderBy(sql`DATE(${receiptImportTable.createdAt})`);
+      .execute();
 
-    // Generate complete date range with zero values for missing dates
-    const dataset: { x: string; y: number }[] = [];
-    const currentDate = new Date(start);
-
-    while (currentDate <= end) {
-      const dateStr = currentDate.toISOString().split("T")[0];
-      const dayData = results.find((r) => r.date === dateStr);
-
-      dataset.push({
-        x: dateStr,
-        y: dayData ? Number(dayData.total) : 0,
-      });
-
-      currentDate.setDate(currentDate.getDate() + 1);
+    if (!result.length) {
+      return 0;
     }
 
-    return dataset;
+    return +result[0].count;
   }
 }

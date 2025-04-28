@@ -64,15 +64,15 @@ export class ProductRepository {
     identity: string,
     opts: Pick<RepositoryOption, "select"> & { withSuppliers?: boolean },
     tx?: PgTx,
-  ): Promise<{ data: ProductWithSuppliers; error: null }> {
+  ): Promise<{ data: ProductWithSuppliers; error: string | null }> {
     const isUUID = identity.match(
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
     );
     const column = isUUID ? productTable.id : productTable.productCode;
 
-    const query = tx || database
+    const query: any = tx || database
       .select(opts.select)
-      .from(productTable);
+      .from(productTable)
 
     if (opts.withSuppliers) {
       query.leftJoin(
@@ -83,8 +83,13 @@ export class ProductRepository {
 
     query.where(eq(column, identity)).groupBy(productTable.id);
 
-    const [result] = await query.execute();
-    return { data: result, error: null };
+    const result = await query.execute();
+
+    if (!result.length) {
+      return { data: result, error: `Product not found with identity: ${identity}` };
+    }
+
+    return { data: result[0], error: null };
   }
 
   async findProductsByCondition(
@@ -140,6 +145,10 @@ export class ProductRepository {
       .set(opts.set)
       .where(and(...filters))
       .returning({ id: productTable.id });
+
+    if (!result.length) {
+      return { data: result, error: "Can't update product" };
+    }
 
     return { data: result, error: null };
   }
@@ -222,8 +231,8 @@ export class ProductRepository {
 
   async getTotalInventory() {
     const count = await database
-      .select({ 
-        value: sql<number>`ROUND(COALESCE(SUM(${productTable.inventory}), 0))` 
+      .select({
+        value: sql<number>`ROUND(COALESCE(SUM(${productTable.inventory}), 0))`
       })
       .from(productTable)
       .execute();
