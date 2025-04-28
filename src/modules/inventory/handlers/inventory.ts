@@ -93,17 +93,17 @@ export default class InventoryHandler {
       // Update inventory of products
       await Promise.all(
         receiptItems.map(async (item) => {
-          await this.productInventoryLogRepository.createLog(
-            {
-              productId: item.productId,
-              changeType: InventoryChangeType.IMPORT,
-              previousInventory: item.inventory,
-              inventoryChange: item.quantity,
-              currentInventory: item.inventory + item.quantity,
-              userId,
-            },
-            tx
-          );
+          // await this.productInventoryLogRepository.createLog(
+          //   {
+          //     productId: item.productId,
+          //     changeType: InventoryChangeType.IMPORT,
+          //     previousInventory: item.inventory,
+          //     inventoryChange: item.quantity,
+          //     currentInventory: item.inventory + item.quantity,
+          //     userId,
+          //   },
+          //   tx
+          // );
 
           await this.productRepository.updateProduct(
             {
@@ -147,7 +147,7 @@ export default class InventoryHandler {
     });
   }
 
-  async getTotalInventory(ctx: Context) {
+  async getTotalInventoryDataset(ctx: Context) {
     const query = ctx.req.query();
     let { startDate, endDate } = query;
 
@@ -179,7 +179,7 @@ export default class InventoryHandler {
     });
   }
 
-  async getTotalValueInventory(ctx: Context) {
+  async getTotalValueInventoryDataset(ctx: Context) {
     const query = ctx.req.query();
     let { startDate, endDate } = query;
 
@@ -211,7 +211,7 @@ export default class InventoryHandler {
     });
   }
 
-  async getTotalOfImportNew(ctx: Context) {
+  async getTotalOfImportNewDataset(ctx: Context) {
     const query = ctx.req.query();
     let { startDate, endDate } = query;
 
@@ -236,14 +236,14 @@ export default class InventoryHandler {
     return ctx.json({
       data: {
         value: totalOfImportNew,
-        dataset,
+        dataset: [],
       },
       success: true,
       statusCode: 200,
     });
   }
 
-  async getTotalOfReturn(ctx: Context) {
+  async getTotalOfReturnDataset(ctx: Context) {
     const query = ctx.req.query();
     let { startDate, endDate } = query;
 

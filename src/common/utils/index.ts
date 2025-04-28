@@ -48,7 +48,7 @@ export const getPaginationMetadata = (
   page: number,
   limit: number,
   offset: number,
-  totalItems: number,
+  totalItems: number
 ): PaginationResult => {
   // Calculate total number of pages
   const totalPages = Math.ceil(totalItems / limit);
@@ -102,3 +102,14 @@ export function getObjLength(payload: Record<string, unknown>) {
   return Object.keys(payload).length;
 }
 
+export function isChanged(prop1, prop2): boolean {
+  if (!prop1 || !prop2) {
+    return false;
+  }
+
+  if (prop1 === prop2) {
+    return false;
+  } else {
+    return true;
+  }
+}

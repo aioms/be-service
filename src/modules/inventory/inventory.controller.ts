@@ -28,19 +28,19 @@ export default class InventoryController {
     );
 
     route.get("/inventory/total", authenticate, (c) =>
-      this.inventoryHandler.getTotalInventory(c)
+      this.inventoryHandler.getTotalInventoryDataset(c)
     );
 
     route.get("/inventory/value", authenticate, (c) =>
-      this.inventoryHandler.getTotalValueInventory(c)
+      this.inventoryHandler.getTotalValueInventoryDataset(c)
     );
 
     route.get("/inventory/import-new", authenticate, (c) =>
-      this.inventoryHandler.getTotalOfImportNew(c)
+      this.inventoryHandler.getTotalOfImportNewDataset(c)
     );
 
     route.get("/inventory/return", authenticate, (c) =>
-      this.inventoryHandler.getTotalOfReturn(c)
+      this.inventoryHandler.getTotalOfReturnDataset(c)
     );
 
     route.get("/inventory/import-products", authenticate, (c) =>

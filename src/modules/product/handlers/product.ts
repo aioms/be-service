@@ -8,6 +8,7 @@ import { SupplierRepository } from "../../../database/repositories/supplier.repo
 import { ProductRepository } from "../../../database/repositories/product.repository.ts";
 import { ReceiptItemRepository } from "../../../database/repositories/receipt-item.repository.ts";
 import { ProductInventoryLogRepository } from "../../../database/repositories/product-inventory-log.repository.ts";
+import { UserActivityRepository } from "../../../database/repositories/user-activity.repository.ts";
 
 import {
   productTable,
@@ -24,15 +25,22 @@ import { receiptItemTable } from "../../../database/schemas/receipt-item.schema.
 import {
   getPagination,
   getPaginationMetadata,
+  isChanged,
   parseBodyJson,
 } from "../../../common/utils/index.ts";
 import { generateProductCode } from "../utils/product.util.ts";
 import { generateSupplierCode } from "../../supplier/utils/supplier.util.ts";
-import type { ResponseType } from "../../../common/types/index.d.ts";
+import type {
+  RepositoryOption,
+  ResponseType,
+} from "../../../common/types/index.d.ts";
 
 import { database } from "../../../common/config/database.ts";
 import { ProductStatus } from "../enums/product.enum.ts";
 import { InventoryChangeType } from "../../../database/enums/inventory.enum.ts";
+import { UserActivityType } from "../../../database/enums/user-activity.enum.ts";
+import { ProductWithSuppliers } from "../../../database/types/product.type.ts";
+import { PgTx } from "../../../database/custom/data-types.ts";
 
 @singleton()
 export default class ProductHandler {
@@ -42,7 +50,9 @@ export default class ProductHandler {
     @inject(ReceiptItemRepository)
     private receiptItemRepository: ReceiptItemRepository,
     @inject(ProductInventoryLogRepository)
-    private productInventoryLogRepository: ProductInventoryLogRepository
+    private productInventoryLogRepository: ProductInventoryLogRepository,
+    @inject(UserActivityRepository)
+    private userActivityRepository: UserActivityRepository
   ) {}
 
   async createProduct(ctx: Context) {
@@ -134,22 +144,18 @@ export default class ProductHandler {
       unit,
     } = body;
 
-    const { data: product } =
-      await this.productRepository.findProductByIdentity(
-        id,
-        {
-          select: {
-            id: productTable.id,
-            inventory: productTable.inventory,
-          },
-        },
-      );
-    if (!product) {
-      throw new Error("Product not found");
-    }
+    const product = await this.getProductByIdentity(id, {
+      select: {
+        id: productTable.id,
+        productCode: productTable.productCode,
+        inventory: productTable.inventory,
+        costPrice: productTable.costPrice,
+        sellingPrice: productTable.sellingPrice,
+      },
+    });
 
+    // Update product details
     const result = await database.transaction(async (tx) => {
-      // Update product details
       const dataUpdate: Partial<UpdateProduct> = {
         updatedAt: dayjs().toISOString(),
       };
@@ -164,42 +170,26 @@ export default class ProductHandler {
       if (warehouse) dataUpdate.warehouse = warehouse;
       if (unit) dataUpdate.unit = unit;
 
-      const { data: productUpdated } =
-        await this.productRepository.updateProduct(
-          {
-            set: dataUpdate,
-            where: [eq(productTable.id, id)],
-          },
-          tx
-        );
-
-      if (!productUpdated.length) {
-        throw new Error("Can't update product");
+      const { error } = await this.productRepository.updateProduct(
+        {
+          set: dataUpdate,
+          where: [eq(productTable.id, id)],
+        },
+        tx
+      );
+      if (error) {
+        throw new Error(error);
       }
 
-      if (suppliers !== undefined) {
-        // Delete existing relationships
-        await tx
-          .delete(productSupplierTable)
-          .where(eq(productSupplierTable.productId, id));
-
-        // Insert new relationships
-        if (suppliers.length > 0) {
-          const productSuppliers: InsertProductSupplier[] = suppliers.map(
-            (supplier) => ({
-              productId: id,
-              supplierId: supplier.id,
-              costPrice: supplier.costPrice,
-              updatedAt: new Date().toISOString(),
-            })
-          );
-
-          await tx.insert(productSupplierTable).values(productSuppliers);
-        }
+      // Update product-supplier relationships
+      if (suppliers !== undefined && suppliers.length) {
+        await this.updateProductSuppliers(id, suppliers, tx);
       }
 
-      if (inventory !== undefined && inventory !== product.inventory) {
+      // Create inventory log
+      if (isChanged(product.inventory, inventory)) {
         const inventoryChange = product.inventory - (inventory as number);
+        const costPriceChange = product.costPrice - (costPrice as number);
 
         await this.productInventoryLogRepository.createLog(
           {
@@ -208,11 +198,17 @@ export default class ProductHandler {
             previousInventory: product.inventory,
             inventoryChange,
             currentInventory: inventory as number,
+            previousCostPrice: product.costPrice,
+            costPriceChange,
+            currentCostPrice: costPrice as number,
             userId,
           },
           tx
         );
       }
+
+      // Create user activity log
+      await this.createUserActivityLog(dataUpdate, product, userId, id, tx);
 
       return { id };
     });
@@ -249,7 +245,7 @@ export default class ProductHandler {
   async getProductById(ctx: Context) {
     const productId = ctx.req.param("id");
 
-    const { data: product } =
+    const { data: product, error } =
       await this.productRepository.findProductByIdentity(productId, {
         select: {
           id: productTable.id,
@@ -287,8 +283,8 @@ export default class ProductHandler {
         withSuppliers: true,
       });
 
-    if (!product) {
-      throw new Error("Product not found");
+    if (error) {
+      throw new Error(error);
     }
 
     return ctx.json({
@@ -703,5 +699,78 @@ export default class ProductHandler {
       success: true,
       statusCode: 200,
     });
+  }
+
+  /**
+   * Private methods
+   */
+
+  private async getProductByIdentity(
+    identity: string,
+    opts: Pick<RepositoryOption, "select"> & { withSuppliers?: boolean },
+    tx?: PgTx
+  ): Promise<ProductWithSuppliers> {
+    const { data: product } =
+      await this.productRepository.findProductByIdentity(identity, opts, tx);
+
+    if (!product) {
+      throw new Error(`Product not found with identity: ${identity}`);
+    }
+
+    return product;
+  }
+
+  private async updateProductSuppliers(
+    productId: string,
+    suppliers: Array<{ id: string; costPrice: number }>,
+    tx: PgTx
+  ): Promise<void> {
+    // Insert new product-supplier relationships
+    await tx
+      .delete(productSupplierTable)
+      .where(eq(productSupplierTable.productId, productId));
+
+    const productSuppliers: InsertProductSupplier[] = suppliers.map(
+      (supplier) => ({
+        productId,
+        supplierId: supplier.id,
+        costPrice: supplier.costPrice,
+        createdAt: new Date().toISOString(),
+      })
+    );
+
+    await tx.insert(productSupplierTable).values(productSuppliers);
+  }
+
+  private async createUserActivityLog(
+    dataUpdate: Record<string, any>,
+    oldData: Record<string, any>,
+    userId: string,
+    id: string,
+    tx: PgTx
+  ): Promise<void> {
+    if (isChanged(oldData.sellingPrice, dataUpdate.sellingPrice)) {
+      await this.userActivityRepository.createActivity(
+        {
+          userId,
+          type: UserActivityType.PRODUCT_SELLING_PRICE_CHANGE,
+          description: `Vừa thay đổi giá bán của sản phẩm ${oldData.productCode}`,
+          referenceId: id,
+        },
+        tx
+      );
+    }
+
+    if (isChanged(oldData.costPrice, dataUpdate.costPrice)) {
+      await this.userActivityRepository.createActivity(
+        {
+          userId,
+          type: UserActivityType.PRODUCT_COST_PRICE_CHANGE,
+          description: `Vừa thay đổi giá vốn của sản phẩm ${oldData.productCode}`,
+          referenceId: id,
+        },
+        tx
+      );
+    }
   }
 }
