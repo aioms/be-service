@@ -50,9 +50,9 @@ export type SelectProductInventoryLog =
   typeof productInventoryLogTable.$inferSelect;
 
 // // Indexes for better query performance
-export const productInventoryLogIndexes = {
-  productIdIdx: sql`CREATE INDEX IF NOT EXISTS product_inventory_log_product_id_idx ON ${productInventoryLogTable} (product_id)`,
-  createdAtIdx: sql`CREATE INDEX IF NOT EXISTS product_inventory_log_created_at_idx ON ${productInventoryLogTable} (created_at)`,
-  changeTypeIdx: sql`CREATE INDEX IF NOT EXISTS product_inventory_log_change_type_idx ON ${productInventoryLogTable} (change_type)`,
-  referenceIdIdx: sql`CREATE INDEX IF NOT EXISTS product_inventory_log_reference_id_idx ON ${productInventoryLogTable} (reference_id)`,
-};
+// export const productInventoryLogIndexes = {
+//   productIdIdx: sql`CREATE INDEX IF NOT EXISTS product_inventory_log_product_id_idx ON ${productInventoryLogTable} (product_id)`,
+//   createdAtIdx: sql`CREATE INDEX IF NOT EXISTS product_inventory_log_created_at_idx ON ${productInventoryLogTable} (created_at)`,
+//   changeTypeIdx: sql`CREATE INDEX IF NOT EXISTS product_inventory_log_change_type_idx ON ${productInventoryLogTable} (change_type)`,
+//   referenceIdIdx: sql`CREATE INDEX IF NOT EXISTS product_inventory_log_reference_id_idx ON ${productInventoryLogTable} (reference_id)`,
+// };
