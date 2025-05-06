@@ -93,17 +93,17 @@ export default class InventoryHandler {
       // Update inventory of products
       await Promise.all(
         receiptItems.map(async (item) => {
-          // await this.productInventoryLogRepository.createLog(
-          //   {
-          //     productId: item.productId,
-          //     changeType: InventoryChangeType.IMPORT,
-          //     previousInventory: item.inventory,
-          //     inventoryChange: item.quantity,
-          //     currentInventory: item.inventory + item.quantity,
-          //     userId,
-          //   },
-          //   tx
-          // );
+          await this.productInventoryLogRepository.createLog(
+            {
+              productId: item.productId,
+              changeType: InventoryChangeType.IMPORT,
+              previousInventory: item.inventory,
+              inventoryChange: item.quantity,
+              currentInventory: item.inventory + item.quantity,
+              userId,
+            },
+            tx
+          );
 
           await this.productRepository.updateProduct(
             {

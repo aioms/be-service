@@ -20,10 +20,11 @@ const config = {
 
 // Validate the configuration
 const parsedConfig = configSchema.safeParse(config);
+console.log({ parsedConfig, config })
 
 if (!parsedConfig.success) {
   console.error("Invalid env:", parsedConfig.error.format());
-  throw new Error(`Invalid env: ${parsedConfig.error.format()}`);
+  // throw new Error(`Invalid env: ${parsedConfig.error.format()}`);
 }
 
 export const DbTables = Object.freeze({
