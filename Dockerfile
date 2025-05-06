@@ -1,5 +1,4 @@
-# Stage 1: Build Stage
-FROM denoland/deno:alpine-2.0.2 as builder
+FROM denoland/deno:alpine-2.0.2
 
 WORKDIR /app
 
@@ -9,14 +8,6 @@ RUN deno install
 
 # Copy the rest of the application files
 COPY . .
-
-# Stage 2: Runtime Stage
-FROM denoland/deno:alpine-2.0.2
-
-WORKDIR /app
-
-# Copy the cached dependencies from the builder stage
-COPY --from=builder /app /app
 
 # Expose the application port (adjust as per your app)
 EXPOSE 2005
